@@ -97,18 +97,7 @@ replyMsg (Config _ _ _ nck _) conn (Message (Just (NickName sender _ _)) cmd (re
 replyMsg _ _ _ = return ()
 
 prefixWith :: String -> String -> Bool
-prefixWith xs ys = or $ zipWith (==) xs ys
-
-{-
-replyMsg :: Handle -> Message -> IO ()
-replyMsg conn msg =
-  let reply =
-        case msg of
-          Message _ "PING" _ -> "PONG"
-          Message (Just (NickName sender _ _)) "PRIVMSG" (recv:"zmsg":msg) -> toString . encode $ zmsg (toString sender) (unwords $ map toString msg)
-          _ -> ""
-  in unless (null reply) (hPutStrLn conn reply >> putStrLn reply)
--}
+prefixWith xs ys = and $ zipWith (==) xs ys
 
 ----
 
