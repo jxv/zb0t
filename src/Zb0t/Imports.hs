@@ -12,6 +12,7 @@ import Control.Monad.Trans.State as Imports
 import Data.Either as Imports
 import Data.Maybe as Imports
 import Data.Char as Imports
+import Data.ByteString as Imports (pack, unpack, ByteString)
 import System.Environment as Imports
 import System.IO as Imports
 import System.IO.Error as Imports

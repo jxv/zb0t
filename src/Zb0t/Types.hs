@@ -14,5 +14,8 @@ data Config = Config
   , cfgPassword :: Maybe String
   } deriving (Show, Eq)
 
-data Event = Event
+data Event 
+  = Send Message 
+  | Recv Message
+  | RawMessage String
 
