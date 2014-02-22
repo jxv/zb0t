@@ -1,8 +1,9 @@
-module Zbit.Imports (module Imports) where
+module Zb0t.Imports (module Imports) where
 
 ----
 
 import GHC.IO.Handle as Imports
+import GHC.Word as Imports
 import Control.Concurrent as Imports
 import Control.Concurrent.MVar as Imports
 import Control.Monad as Imports

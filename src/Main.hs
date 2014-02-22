@@ -2,10 +2,9 @@ module Main (main) where
 
 ---
 
-import Zbit.Imports
-import Zbit.Types
-import Zbit.Config (makeConfig)
-import Zbit.Core (run)
+import Zb0t.Imports
+import Zb0t.Config (makeConfig)
+import Zb0t.Core (run)
 
 ----
 

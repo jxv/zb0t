@@ -1,16 +1,18 @@
-module Zbit.Types where
+module Zb0t.Types where
 
 ----
 
-import Zbit.Imports
+import Zb0t.Imports
 
 ----
 
 data Config = Config
   { cfgServerAddr :: String
-  , cfgServerPort :: Integer 
+  , cfgServerPort :: Integer
   , cfgChannels :: [String]
   , cfgNick :: String
   , cfgPassword :: Maybe String
   } deriving (Show, Eq)
+
+data Event = Event
 

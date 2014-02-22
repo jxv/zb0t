@@ -1,4 +1,4 @@
-module Zbit.Config
+module Zb0t.Config
   ( defPort
   , defConfig
   , makeConfig
@@ -6,8 +6,8 @@ module Zbit.Config
 
 ----
 
-import Zbit.Imports
-import Zbit.Types
+import Zb0t.Imports
+import Zb0t.Types
 
 ----
 
@@ -34,7 +34,7 @@ makeConfig args =
 
 parseServerAddr :: [String] -> State (Either String Config) ()
 parseServerAddr x = case x of
-  [] -> put (Left "no server address")
+  [] -> put (Left "No server address.")
   ("-s":addr:_) -> getput $ \cfg -> cfg {cfgServerAddr = addr}
   (_:args) -> parseServerAddr args 
 
@@ -53,9 +53,9 @@ parseChannels x = case x of
 
 parseNick :: [String] -> State (Either String Config) ()
 parseNick x = case x of
-  [] -> put (Left "no nick")
+  [] -> put (Left "No nick.")
   ("-n":nick:_) -> getput $ \cfg -> cfg {cfgNick = nick}
-  ("-c":_) -> put (Left "no nick")
+  ("-c":_) -> put (Left "No nick.")
   (_:args) -> parseNick args
 
 parsePassword :: [String] -> State (Either String Config) ()

@@ -1,4 +1,4 @@
-name: zbit
+name: zb0t
 version: 0.1.0.0
 -- synopsis:            
 -- description:         
@@ -12,7 +12,7 @@ build-type: Simple
 -- extra-source-files:  
 cabal-version: >= 1.10
 
-executable zbit
+executable zb0t
   main-is: Main.hs
   -- other-modules:       
   -- other-extensions:    
