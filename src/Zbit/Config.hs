@@ -33,34 +33,35 @@ makeConfig args =
 ----
 
 parseServerAddr :: [String] -> State (Either String Config) ()
-parseServerAddr [] = put (Left "no server address")
-parseServerAddr ("-s":addr:_) = getput $ \cfg -> cfg {cfgServerAddr = addr}
-parseServerAddr (_:args) = parseServerAddr args 
-
+parseServerAddr x = case x of
+  [] -> put (Left "no server address")
+  ("-s":addr:_) -> getput $ \cfg -> cfg {cfgServerAddr = addr}
+  (_:args) -> parseServerAddr args 
 
 parseServerPort :: [String] -> State (Either String Config) ()
-parseServerPort [] = return ()
-parseServerPort ("-p":sport:_) = getput $ \cfg -> cfg {cfgServerPort = fromMaybe defPort (readMay sport)}
-parseServerPort ("-c":_) = return ()
-parseServerPort (_:args) = parseServerPort args 
-
+parseServerPort x = case x of
+  [] -> return ()
+  ("-p":sport:_) -> getput $ \cfg -> cfg {cfgServerPort = fromMaybe defPort (readMay sport)}
+  ("-c":_) -> return ()
+  (_:args) -> parseServerPort args 
 
 parseChannels :: [String] -> State (Either String Config) ()
-parseChannels [] = return ()
-parseChannels ("-c":chans) = getput $ \cfg -> cfg {cfgChannels = chans}
-parseChannels (_:args) = parseChannels args
-
+parseChannels x = case x of
+  [] -> return ()
+  ("-c":chans) -> getput $ \cfg -> cfg {cfgChannels = chans}
+  (_:args) -> parseChannels args
 
 parseNick :: [String] -> State (Either String Config) ()
-parseNick [] = put (Left "no nick")
-parseNick ("-n":nick:_) = getput $ \cfg -> cfg {cfgNick = nick}
-parseNick ("-c":_) = put (Left "no nick")
-parseNick (_:args) = parseNick args
-
+parseNick x = case x of
+  [] -> put (Left "no nick")
+  ("-n":nick:_) -> getput $ \cfg -> cfg {cfgNick = nick}
+  ("-c":_) -> put (Left "no nick")
+  (_:args) -> parseNick args
 
 parsePassword :: [String] -> State (Either String Config) ()
-parsePassword [] = return ()
-parsePassword ("-w":pswd:_) = getput $ \cfg -> cfg {cfgPassword = Just pswd}
-parsePassword ("-c":_) = return ()
-parsePassword (_:args) = parsePassword args 
+parsePassword x = case x of
+  [] -> return ()
+  ("-w":pswd:_) -> getput $ \cfg -> cfg {cfgPassword = Just pswd}
+  ("-c":_) -> return ()
+  (_:args) -> parsePassword args 
 
