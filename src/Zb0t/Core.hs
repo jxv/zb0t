@@ -121,30 +121,6 @@ joinMsg chan = Message Nothing "JOIN" [toBString chan]
 
 ----
 
-zzzz :: String -> String
-zzzz str = unwords $ map (zify . (map toLower)) (words str)
-
-zify :: String -> String
-zify str
-  | length str < 4 = replicate (4 - length str) 'z' ++ str
-  | length str == 4 = 'z' : drop 1 str 
-  | hasVowel str = zify (dropVowel str)
-  | otherwise = zify (drop 1 str)
-
-isVowel :: Char -> Bool
-isVowel c = c `elem` "aeiou"
-
-hasVowel :: String -> Bool
-hasVowel = or . map isVowel
-
-dropVowel :: String -> String
-dropVowel [] = []
-dropVowel (c:str)
-  | isVowel c = str
-  | otherwise = c : dropVowel str
-
-----
-
 toString :: ByteString -> String
 toString = map (toEnum . fromEnum) . unpack
 
