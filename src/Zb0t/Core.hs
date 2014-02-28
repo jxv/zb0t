@@ -19,15 +19,19 @@ getConn (Config srv port _ _ _) =
 ----
 
 run :: Config -> IO ()
-run cfg = withSocketsDo $
+run cfg@(Config _ _ chans nck mpswd) = withSocketsDo $
   do mconn <- getConn cfg
      case mconn of
        Nothing -> putStrLn "No connection."
        Just conn ->
          do chan <- newChan
-            void $ forkIO (recv cfg conn chan)
-            void $ forkIO (input chan)
-            (send cfg conn chan)
+            login nck mpswd chan
+            join' chans chan
+            thdrecv <- forkIO (recv conn chan)
+            thdinput <- forkIO (input chan)
+            send cfg conn chan
+            killThread thdrecv
+            killThread thdinput
 
 ----
 
@@ -39,21 +43,21 @@ input chan =
 
 ----
 
-initAccount :: String -> Maybe String -> [String] -> Chan Event -> IO ()
-initAccount nck mpswd chans chan =
+login :: String -> Maybe String -> Chan Event -> IO ()
+login nck mpswd chan =
   do writeChan chan (Send $ nickMsg nck)
      writeChan chan (Send $ userMsg nck 0 "*" nck)
      case mpswd of 
         Nothing -> return ()
         Just pswd -> writeChan chan (Send $ identifyMsg pswd)
-     mapM_ (writeChan chan . Send . joinMsg) chans
 
-recv :: Config -> Handle -> Chan Event -> IO ()
-recv (Config _ _ chans nck mpswd) conn chan =
-  do initAccount nck mpswd chans chan
-     fix $ \loop ->
-       do again <- (recvMsg conn chan) `catchIOError` (const $ return False)
-          when again loop
+join' :: [String] -> Chan Event -> IO ()
+join' chans chan = mapM_ (writeChan chan . Send . joinMsg) chans
+
+recv :: Handle -> Chan Event -> IO ()
+recv conn chan =
+  do again <- (recvMsg conn chan) `catchIOError` (const $ return False)
+     when again (recv conn chan)
 
 recvMsg :: Handle -> Chan Event -> IO Bool 
 recvMsg conn chan =
