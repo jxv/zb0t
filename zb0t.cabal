@@ -17,7 +17,7 @@ executable zb0t
   -- other-modules:       
   -- other-extensions:    
   build-depends:
-    base >= 4.6
+    base >= 4.6,
     bytestring >= 0.10 && < 0.11, 
     network >= 2.4 && < 2.5,
     irc >= 0.6 && < 0.7,
