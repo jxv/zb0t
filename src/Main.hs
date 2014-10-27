@@ -1,23 +1,28 @@
 module Main (main) where
 
----
-
 import Zb0t.Imports
 import Zb0t.Config (makeConfig)
 import Zb0t.Core (run)
 
-----
 
 main :: IO ()
-main =
-  do args <- getArgs
-     let econfig = makeConfig args
-     either usageErr run econfig
+main = do
+     args <- getArgs
+     either printUsageErr run (makeConfig args)
 
-usageErr :: String -> IO ()
-usageErr err =
-  do putStrLn ("Error: " ++ err ++ "\n")
+
+printUsageErr :: String -> IO ()
+printUsageErr err = do
+     putStrLn $ "Error: " ++ err
      prog <- getProgName
-     putStrLn ("Usage:\t" ++ prog ++ " -s <server> [-p <port>] -n <nick> [-w <password>] [-c <chan0> [<chan1> [...]]]\n")
+     putStrLn $ unwords ("Usage:" : prog : options)
 
 
+options :: [String]
+options = 
+    [ "-s <server>"
+    , "[-p <port>]"
+    , "-n <nick>"
+    , "[-w <password>]"
+    , "[-c <chan0> [<chan1> [...]]]"
+    ]
