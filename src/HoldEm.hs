@@ -4,6 +4,7 @@ module HoldEm
     , Card(..)
     , Hand(..)
     , PHand
+    , HandSet
     , Table(..)
     , bestHand
     , deal
@@ -45,6 +46,7 @@ data Hand
 
 
 type PHand = (Card, Card)
+type HandSet = (Card, Card, Card, Card, Card)
 
 
 data Table = Table
@@ -112,7 +114,7 @@ deal rg numPlayers
         in (Table (a,b,c) d e, take numPlayers $ foldPHands cs)
             
 
-bestHand :: PHand -> Table -> Hand
+bestHand :: PHand -> Table -> (Hand, HandSet)
 bestHand (a,b) (Table (c,d,e) f g) = Maybe.fromMaybe high tryFst
  where
     seven = [a,b,c,d,e,f,g]
@@ -120,41 +122,42 @@ bestHand (a,b) (Table (c,d,e) f g) = Maybe.fromMaybe high tryFst
                , straightMay, kind3May, pair2May, pair1May ]
     tryFst = foldr (<|>) Nothing (map ($ seven) handsMay)
     high = let (v:w:x:y:z:_) = revSort seven
-           in High (rank v) (rank w) (rank x) (rank y) (rank z)
+           in (High (rank v) (rank w) (rank x) (rank y) (rank z), (v,w,x,y,z))
 
 
-pair1May :: [Card] -> Maybe Hand
+pair1May :: [Card] -> Maybe (Hand, HandSet)
 pair1May xs = do
-    (h:hs) <- Safe.takeExactMay 4 (clusterByRank xs)
-    (a:_) <- Safe.takeExactMay 2 h
-    (b:c:d:_) <- Safe.takeExactMay 3 (List.concat hs)
-    Just $ Pair1 (rank a) (rank b) (rank c) (rank d)
+    h:hs <- Safe.takeExactMay 4 (clusterByRank xs)
+    a:b:[] <- Safe.takeExactMay 2 h
+    c:d:e:[] <- Safe.takeExactMay 3 (List.concat hs)
+    Just (Pair1 (rank a) (rank c) (rank d) (rank e), (a,b,c,d,e))
 
 
-pair2May :: [Card] -> Maybe Hand
+pair2May :: [Card] -> Maybe (Hand, HandSet)
 pair2May xs = do
-    (h:i:j:_) <- Safe.takeExactMay 3 (clusterByRank xs)
-    (a:_) <- Safe.takeExactMay 2 h
-    (b:_) <- Safe.takeExactMay 2 i
-    c <- Safe.headMay j
-    Just $ Pair2 (rank a) (rank b) (rank c)
+    h:i:j:[] <- Safe.takeExactMay 3 (clusterByRank xs)
+    a:b:[] <- Safe.takeExactMay 2 h
+    c:d:[] <- Safe.takeExactMay 2 i
+    e <- Safe.headMay j
+    Just (Pair2 (rank a) (rank c) (rank e), (a,b,c,d,e))
 
 
-kind3May :: [Card] -> Maybe Hand
+kind3May :: [Card] -> Maybe (Hand, HandSet)
 kind3May xs = do
-    (h:hs) <- Safe.takeExactMay 3 (clusterByRank xs)
-    (a:_) <- Safe.takeExactMay 3 h
-    (b:c:_) <- Safe.takeExactMay 2 (List.concat hs)
-    Just $ Kind3 (rank a) (rank b) (rank c)
+    h:hs <- Safe.takeExactMay 3 (clusterByRank xs)
+    a:b:c:[] <- Safe.takeExactMay 3 h
+    d:e:[] <- Safe.takeExactMay 2 (List.concat hs)
+    Just (Kind3 (rank a) (rank d) (rank e), (a,b,c,d,e))
 
 
-straightMay :: [Card] -> Maybe Hand
+straightMay :: [Card] -> Maybe (Hand, HandSet)
 straightMay xs = do
-    (a:_) <- Safe.headMay $ filter
+    h <- Safe.headMay $ filter
             (\h -> let rs = map rank h
                    in length h == 5 && (revConsecutive rs || rs == [R5,R4,R3,R2,A]))
             (possible xs)
-    Just $ Straight (rank a)
+    a:b:c:d:e:[] <- Safe.takeExactMay 5 h
+    Just (Straight (rank a), (a,b,c,d,e))
  where
     cvtLow x = if map rank x == [A,R5,R4,R3,R2] then (tail x) ++ [head x] else x
     possible = revSort
@@ -171,34 +174,34 @@ revConsecutive as = case as of
     (a:b:as) -> b /= maxBound && a == succ b && revConsecutive (b:as) 
 
 
-flushMay :: [Card] -> Maybe Hand
+flushMay :: [Card] -> Maybe (Hand, HandSet)
 flushMay xs = do
     h <- Safe.headMay (clusterBySuit xs)
-    (a:b:c:d:e:_) <- Safe.takeExactMay 5 (revSort h)
-    Just $ Flush (rank a) (rank b) (rank c) (rank d) (rank e)
+    a:b:c:d:e:[] <- Safe.takeExactMay 5 (revSort h)
+    Just (Flush (rank a) (rank b) (rank c) (rank d) (rank e), (a,b,c,d,e))
 
 
-fHouseMay :: [Card] -> Maybe Hand
+fHouseMay :: [Card] -> Maybe (Hand, HandSet)
 fHouseMay xs = do
-    (h:i:_) <- Safe.takeExactMay 2 (clusterByRank xs)
-    (a:_) <- Safe.takeExactMay 3 h
-    (b:_) <- Safe.takeExactMay 2 i
-    Just $ FHouse (rank a) (rank b)
+    h:i:[] <- Safe.takeExactMay 2 (clusterByRank xs)
+    a:b:c:[] <- Safe.takeExactMay 3 h
+    d:e:[] <- Safe.takeExactMay 2 i
+    Just (FHouse (rank a) (rank d), (a,b,c,d,e))
 
 
-kind4May :: [Card] -> Maybe Hand
+kind4May :: [Card] -> Maybe (Hand, HandSet)
 kind4May xs = do
-    (h:i:_) <- Safe.takeExactMay 2 (clusterByRank xs)
-    (a:_) <- Safe.takeExactMay 4 h
-    b <- Safe.headMay i
-    Just $ Kind4 (rank a) (rank b)
+    h:i:[] <- Safe.takeExactMay 2 (clusterByRank xs)
+    a:b:c:d:[] <- Safe.takeExactMay 4 h
+    e <- Safe.headMay i
+    Just (Kind4 (rank a) (rank e), (a,b,c,d,e))
 
 
-sFlushMay :: [Card] -> Maybe Hand
+sFlushMay :: [Card] -> Maybe (Hand, HandSet)
 sFlushMay xs = do
     xs' <- Safe.headMay (clusterBySuit xs)
-    h <- flushMay xs'
-    case h of Straight r -> Just (SFlush r); _ -> Nothing
+    (h,set) <- flushMay xs'
+    case h of Straight r -> Just (SFlush r, set); _ -> Nothing
 
 
 clusterByRank :: [Card] -> [[Card]]
@@ -219,3 +222,19 @@ clusterBySuit = List.sortBy (\a b -> compare (length b) (length a))
 
 revSort :: Ord a => [a] -> [a]
 revSort = List.sortBy (flip compare)
+
+-- http://en.wikipedia.org/wiki/Texas_hold_%27em#Sample_showdown
+
+tests :: Bool
+tests =
+    let tbl   = Table (Card R4 C, Card K S, Card R4 H) (Card R8 S) (Card R7 S)
+        bob   = (Card A C, Card R4 D)
+        carol = (Card A S, Card R9 S)
+        ted   = (Card K H, Card K D)
+        alice = (Card R5 D, Card R6 D)
+    in Kind3 R4 A K       == fst (bestHand bob   tbl) &&
+       Flush A K R9 R8 R7 == fst (bestHand carol tbl) &&
+       FHouse K R4        == fst (bestHand ted   tbl) &&
+       Straight R8        == fst (bestHand alice tbl)
+
+

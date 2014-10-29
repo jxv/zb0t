@@ -94,9 +94,10 @@ replyMsg _ conn (Message Nothing cmd params)
   where reply x = hPutStrLn conn x >> putStrLn x
 replyMsg (Config _ _ _ nck _) conn (Message (Just (NickName sender _ _)) cmd (recvr:msg))
   | cmd == "PRIVMSG" && prefixWith "zsay " (toString (head msg)) =
-    if toString recvr == nck
-       then  reply $ "PRIVMSG " ++ (toString sender) ++ " :" ++ (zsay . drop 5 . unwords . map toString $ msg)
-       else  reply $ "PRIVMSG " ++ (toString recvr) ++ " :" ++ (zsay . drop 5 . unwords . map toString $ msg)
+       reply $ "PRIVMSG " ++
+               toString (if toString recvr == nck then sender else recvr) ++
+               " :" ++
+               (zsay . drop 5 . unwords . map toString $ msg)
   | otherwise = return ()
   where reply x = hPutStrLn conn x >> putStrLn x
 replyMsg _ _ _ = return ()
