@@ -160,7 +160,7 @@ revConsecutive :: (Enum a, Eq a) => [a] -> Bool
 revConsecutive as = case as of
     [] -> True;
     [a] -> True
-    (a:b:as) -> a == succ b && revConsecutive (b:as) 
+    (a:b:as) -> b /= maxBound && a == succ b && revConsecutive (b:as) 
 
 
 flushMay :: [Card] -> Maybe Hand
