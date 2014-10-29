@@ -1,12 +1,19 @@
 module HoldEm where
 
 
+import qualified Data.List as List
+
+
 data Rank = R2 | R3 | R4 | R5 | R6 | R7 | R8 | R9 | R10 | J | Q | K | A
         deriving (Show, Enum, Ord, Bounded, Eq)
 
 
 data Suit = C | H | D | S
         deriving (Show, Enum, Bounded, Eq)
+
+
+data Card = Card { suit :: Suit, rank :: Rank }
+        deriving (Show, Eq)
 
 
 data Hand
@@ -20,6 +27,20 @@ data Hand
     | Pair1     Rank Rank Rank Rank
     | High      Rank Rank Rank Rank Rank
     deriving (Show, Eq)
+
+
+type PHand = (Card, Card)
+
+
+data Table = Table
+    { flop :: (Card, Card, Card)
+    , turn :: Card 
+    , river :: Card
+    }
+
+
+instance Ord Card where
+    compare (Card _ a) (Card _ v) = compare a v
 
 
 instance Ord Hand where
@@ -57,3 +78,12 @@ compare4 (a,b,c,d) (v,w,x,y) = case compare a v of EQ -> compare3 (b,c,d) (w,x,y
 compare5 :: (Rank, Rank, Rank, Rank, Rank) -> (Rank, Rank, Rank, Rank, Rank) -> Ordering
 compare5 (a,b,c,d,e) (v,w,x,y,z) =
     case compare a v of EQ -> compare4 (b,c,d,e) (w,x,y,z); o -> o
+
+
+bestHand :: PHand -> Table -> Hand
+bestHand (a,b) (Table (c,d,e) f g) = lastResort
+ where
+    lastResort = let (v:w:x:y:z:_) = map rank $ List.sortBy (flip compare) [a,b,c,d,e,f,g]
+                 in High v w x y z
+
+
