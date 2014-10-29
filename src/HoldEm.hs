@@ -1,4 +1,3 @@
-{-# LANGUAGE MultiWayIf #-}
 module HoldEm where
 
 
@@ -108,8 +107,7 @@ bestHand (a,b) (Table (c,d,e) f g) = Maybe.fromMaybe high tryFst
     tryFst = (mayKind3 seven) <|>
              (mayPair2 seven) <|>
              (mayPair1 seven)
-    high = let (v:w:x:y:z:_) = map rank $ List.sortBy (flip compare) seven
-           in High v w x y z
+    high = let (v:w:x:y:z:_) = map rank $ revSort seven in High v w x y z
 
 
 mayPair1 :: [Card] -> Maybe Hand
@@ -117,10 +115,10 @@ mayPair1 xs
   | length xs > 7 || length xs < 5 = Nothing
   | otherwise =
         let sorted = List.sortBy (\a b -> compare (length b) (length a))
-                                 (List.group (List.sort xs))
+                                 (groupByRank (List.sort xs))
             h = head sorted
             i = head $ drop 1 sorted
-            (a:b:c:_) = map rank (List.concat $ drop 1 sorted)
+            (a:b:c:_) = map rank $ revSort (List.concat $ drop 1 sorted)
         in if length h == 2 && length i /= 2
               then Just $ Pair1 (rank $ head h) a b c 
               else Nothing
@@ -131,11 +129,11 @@ mayPair2 xs
   | length xs > 7 || length xs < 5 = Nothing
   | otherwise =
         let sorted = List.sortBy (\a b -> compare (length b) (length a))
-                                 (List.group (List.sort xs))
+                                 (groupByRank (List.sort xs))
             h = head sorted
             i = head $ drop 1 sorted
             j = head $ drop 2 sorted
-            (a:_) = map rank (List.concat $ drop 2 sorted)
+            (a:_) = map rank $ revSort (List.concat $ drop 2 sorted)
         in if length h == 2 && length i == 2 && length j /= 2
               then Just $ Pair2 (rank $ head h) (rank $ head i) a
               else Nothing
@@ -146,10 +144,18 @@ mayKind3 xs
   | length xs > 7 || length xs < 5 = Nothing
   | otherwise =
         let sorted = List.sortBy (\a b -> compare (length b) (length a))
-                                 (List.group (List.sort xs))
+                                 (groupByRank (List.sort xs))
             h = head sorted
             i = head $ drop 1 sorted
-            (a:b:_) = map rank (List.concat $ drop 1 sorted)
+            (a:b:_) = map rank $ revSort (List.concat $ drop 1 sorted)
         in if length h == 3 && length i /= 3
               then Just $ Kind3 (rank $ head h) a b
               else Nothing
+
+
+groupByRank :: [Card] -> [[Card]]
+groupByRank = List.groupBy  (\x y -> rank x == rank y)
+
+
+revSort :: Ord a => [a] -> [a]
+revSort = List.sortBy (flip compare)
