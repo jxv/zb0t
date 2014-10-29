@@ -2,6 +2,7 @@ module HoldEm where
 
 
 import qualified Data.List as List
+import qualified System.Random as Random
 
 
 data Rank = R2 | R3 | R4 | R5 | R6 | R7 | R8 | R9 | R10 | J | Q | K | A
@@ -12,8 +13,8 @@ data Suit = C | H | D | S
         deriving (Show, Enum, Bounded, Eq)
 
 
-data Card = Card { suit :: Suit, rank :: Rank }
-        deriving (Show, Eq)
+data Card = Card { rank :: Rank, suit :: Suit }
+        deriving (Eq)
 
 
 data Hand
@@ -36,11 +37,15 @@ data Table = Table
     { flop :: (Card, Card, Card)
     , turn :: Card 
     , river :: Card
-    }
+    } deriving (Show, Eq)
+
+
+instance Show Card where
+    show (Card r s) = (show r) ++ "-" ++ (show s)
 
 
 instance Ord Card where
-    compare (Card _ a) (Card _ v) = compare a v
+    compare (Card a _) (Card v _) = compare a v
 
 
 instance Ord Hand where
@@ -86,4 +91,18 @@ bestHand (a,b) (Table (c,d,e) f g) = lastResort
     lastResort = let (v:w:x:y:z:_) = map rank $ List.sortBy (flip compare) [a,b,c,d,e,f,g]
                  in High v w x y z
 
+
+deck :: [Card]
+deck = [Card r s | s <- [minBound..maxBound], r <- [minBound..maxBound]]
+
+
+deal :: Random.RandomGen g => g -> Int -> Either String (Table, [PHand])
+deal rg numPlayers
+  | numPlayers < 2 || numPlayers > 9 = Left "must be 2-9 players"
+  | otherwise = Right $
+        let (a:b:c:d:e:cs) = map snd $ List.sort $ zip (Random.randoms rg :: [Int]) deck
+            playerHands xs = let (x:y:_, xs') = List.splitAt 2 xs
+                             in (x,y) : playerHands xs'
+        in (Table (a,b,c) d e, take numPlayers $ playerHands cs)
+            
 
