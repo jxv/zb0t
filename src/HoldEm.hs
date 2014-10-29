@@ -150,13 +150,18 @@ kind3May xs = do
 
 straightMay :: [Card] -> Maybe Hand
 straightMay xs = do
-    let xs' = revSort $ List.nubBy (\a b -> rank a == rank b) xs
     (a:_) <- Safe.headMay $ filter
             (\h -> let rs = map rank h
                    in length h == 5 && (revConsecutive rs || rs == [R5,R4,R3,R2,A]))
-            (revSort $ map cvtLow (List.subsequences xs'))
+            (possible xs)
     Just $ Straight (rank a)
- where cvtLow x = if map rank x == [A,R5,R4,R3,R2] then (tail x) ++ [head x] else x
+ where
+    cvtLow x = if map rank x == [A,R5,R4,R3,R2] then (tail x) ++ [head x] else x
+    possible = revSort
+             . map cvtLow
+             . List.subsequences
+             . revSort
+             . List.nubBy (\a b -> rank a == rank b)
 
 
 revConsecutive :: (Enum a, Eq a, Bounded a) => [a] -> Bool
