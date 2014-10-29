@@ -1,4 +1,13 @@
-module HoldEm where
+module HoldEm
+    ( Rank(..)
+    , Suit(..)
+    , Card(..)
+    , Hand(..)
+    , PHand
+    , Table(..)
+    , bestHand
+    , deal
+    ) where
 
 
 import           Control.Applicative
