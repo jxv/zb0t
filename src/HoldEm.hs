@@ -151,12 +151,16 @@ kind3May xs = do
 straightMay :: [Card] -> Maybe Hand
 straightMay xs = do
     let xs' = revSort $ List.nubBy (\a b -> rank a == rank b) xs
-    (a:_) <- Safe.headMay $ filter (\h -> length h == 5 && revConsecutive (map rank h))
-                                   (List.subsequences xs')
+    (a:_) <- Safe.headMay $ filter
+            (\h -> let rs = map rank h
+                   in length h == 5 && (revConsecutive rs || low == rs))
+            (revSort $ map cvtLow (List.subsequences xs'))
     Just $ Straight (rank a)
+ where low    = [R5,R4,R3,R2,A]
+       cvtLow x = if map rank x == [A,R5,R4,R3,R2] then (tail x) ++ [head x] else x
 
 
-revConsecutive :: (Enum a, Eq a) => [a] -> Bool
+revConsecutive :: (Enum a, Eq a, Bounded a) => [a] -> Bool
 revConsecutive as = case as of
     [] -> True;
     [a] -> True
@@ -189,8 +193,8 @@ kind4May xs = do
 sFlushMay :: [Card] -> Maybe Hand
 sFlushMay xs = do
     xs' <- Safe.headMay (clusterBySuit xs)
-    Straight r <- flushMay xs'
-    Just $ SFlush r
+    h <- flushMay xs'
+    case h of Straight r -> Just (SFlush r); _ -> Nothing
 
 
 clusterByRank :: [Card] -> [[Card]]
