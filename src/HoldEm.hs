@@ -1,7 +1,10 @@
+{-# LANGUAGE MultiWayIf #-}
 module HoldEm where
 
 
+import           Control.Applicative
 import qualified Data.List as List
+import qualified Data.Maybe as Maybe
 import qualified System.Random as Random
 
 
@@ -85,13 +88,6 @@ compare5 (a,b,c,d,e) (v,w,x,y,z) =
     case compare a v of EQ -> compare4 (b,c,d,e) (w,x,y,z); o -> o
 
 
-bestHand :: PHand -> Table -> Hand
-bestHand (a,b) (Table (c,d,e) f g) = lastResort
- where
-    lastResort = let (v:w:x:y:z:_) = map rank $ List.sortBy (flip compare) [a,b,c,d,e,f,g]
-                 in High v w x y z
-
-
 deck :: [Card]
 deck = [Card r s | s <- [minBound..maxBound], r <- [minBound..maxBound]]
 
@@ -101,8 +97,59 @@ deal rg numPlayers
   | numPlayers < 2 || numPlayers > 9 = Left "must be 2-9 players"
   | otherwise = Right $
         let (a:b:c:d:e:cs) = map snd $ List.sort $ zip (Random.randoms rg :: [Int]) deck
-            playerHands xs = let (x:y:_, xs') = List.splitAt 2 xs
-                             in (x,y) : playerHands xs'
-        in (Table (a,b,c) d e, take numPlayers $ playerHands cs)
+            foldPHands xs = let (x:y:_,xs') = List.splitAt 2 xs in (x,y) : foldPHands xs'
+        in (Table (a,b,c) d e, take numPlayers $ foldPHands cs)
             
 
+bestHand :: PHand -> Table -> Hand
+bestHand (a,b) (Table (c,d,e) f g) = Maybe.fromMaybe high tryFst
+ where
+    seven = [a,b,c,d,e,f,g]
+    tryFst = (mayKind3 seven) <|>
+             (mayPair2 seven) <|>
+             (mayPair1 seven)
+    high = let (v:w:x:y:z:_) = map rank $ List.sortBy (flip compare) seven
+           in High v w x y z
+
+
+mayPair1 :: [Card] -> Maybe Hand
+mayPair1 xs
+  | length xs > 7 || length xs < 5 = Nothing
+  | otherwise =
+        let sorted = List.sortBy (\a b -> compare (length b) (length a))
+                                 (List.group (List.sort xs))
+            h = head sorted
+            i = head $ drop 1 sorted
+            (a:b:c:_) = map rank (List.concat $ drop 1 sorted)
+        in if length h == 2 && length i /= 2
+              then Just $ Pair1 (rank $ head h) a b c 
+              else Nothing
+
+
+mayPair2 :: [Card] -> Maybe Hand
+mayPair2 xs
+  | length xs > 7 || length xs < 5 = Nothing
+  | otherwise =
+        let sorted = List.sortBy (\a b -> compare (length b) (length a))
+                                 (List.group (List.sort xs))
+            h = head sorted
+            i = head $ drop 1 sorted
+            j = head $ drop 2 sorted
+            (a:_) = map rank (List.concat $ drop 2 sorted)
+        in if length h == 2 && length i == 2 && length j /= 2
+              then Just $ Pair2 (rank $ head h) (rank $ head i) a
+              else Nothing
+
+
+mayKind3 :: [Card] -> Maybe Hand
+mayKind3 xs
+  | length xs > 7 || length xs < 5 = Nothing
+  | otherwise =
+        let sorted = List.sortBy (\a b -> compare (length b) (length a))
+                                 (List.group (List.sort xs))
+            h = head sorted
+            i = head $ drop 1 sorted
+            (a:b:_) = map rank (List.concat $ drop 1 sorted)
+        in if length h == 3 && length i /= 3
+              then Just $ Pair1 (rank $ head h) a b
+              else Nothing
