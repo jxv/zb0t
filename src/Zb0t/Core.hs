@@ -8,6 +8,7 @@ module Zb0t.Core
 
 import Zb0t.Imports
 import Zb0t.Types
+import Zb0t.Say (zsay)
 
 ----
 
@@ -94,8 +95,8 @@ replyMsg _ conn (Message Nothing cmd params)
 replyMsg (Config _ _ _ nck _) conn (Message (Just (NickName sender _ _)) cmd (recvr:msg))
   | cmd == "PRIVMSG" && prefixWith "zsay " (toString (head msg)) =
     if toString recvr == nck
-       then  reply $ "PRIVMSG " ++ (toString sender) ++ " :" ++ (zzzz . drop 5 . unwords . map toString $ msg)
-       else  reply $ "PRIVMSG " ++ (toString recvr) ++ " :" ++ (zzzz . drop 5 . unwords . map toString $ msg)
+       then  reply $ "PRIVMSG " ++ (toString sender) ++ " :" ++ (zsay . drop 5 . unwords . map toString $ msg)
+       else  reply $ "PRIVMSG " ++ (toString recvr) ++ " :" ++ (zsay . drop 5 . unwords . map toString $ msg)
   | otherwise = return ()
   where reply x = hPutStrLn conn x >> putStrLn x
 replyMsg _ _ _ = return ()
@@ -115,7 +116,7 @@ identifyMsg :: String -> Message
 identifyMsg p = Message Nothing "PRIVMSG" ["nickserv", ":identify", toBString p]
 
 zmsg :: String -> String -> Message
-zmsg target msg = Message Nothing "PRIVMSG" (map toBString [target, ' ':(zzzz msg)])
+zmsg target msg = Message Nothing "PRIVMSG" (map toBString [target, ' ':(zsay msg)])
 
 pongMsg :: Message
 pongMsg = Message Nothing "PONG" []
