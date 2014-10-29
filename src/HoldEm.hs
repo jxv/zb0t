@@ -2,9 +2,12 @@ module HoldEm where
 
 
 import           Control.Applicative
+import           Control.Monad
 import qualified Data.List as List
 import qualified Data.Maybe as Maybe
 import qualified System.Random as Random
+import qualified Safe       as Safe
+import qualified Safe.Exact as Safe
 
 
 data Rank = R2 | R3 | R4 | R5 | R6 | R7 | R8 | R9 | R10 | J | Q | K | A
@@ -104,57 +107,97 @@ bestHand :: PHand -> Table -> Hand
 bestHand (a,b) (Table (c,d,e) f g) = Maybe.fromMaybe high tryFst
  where
     seven = [a,b,c,d,e,f,g]
-    tryFst = (mayKind3 seven) <|>
-             (mayPair2 seven) <|>
-             (mayPair1 seven)
-    high = let (v:w:x:y:z:_) = map rank $ revSort seven in High v w x y z
+    handsMay = [ sFlushMay, kind4May, fHouseMay, flushMay
+               , straightMay, kind3May, pair2May, pair1May ]
+    tryFst = foldr (<|>) Nothing (map ($ seven) handsMay)
+    high = let (v:w:x:y:z:_) = revSort seven
+           in High (rank v) (rank w) (rank x) (rank y) (rank z)
 
 
-mayPair1 :: [Card] -> Maybe Hand
-mayPair1 xs
-  | length xs > 7 || length xs < 5 = Nothing
-  | otherwise =
-        let sorted = List.sortBy (\a b -> compare (length b) (length a))
-                                 (groupByRank (List.sort xs))
-            h = head sorted
-            i = head $ drop 1 sorted
-            (a:b:c:_) = map rank $ revSort (List.concat $ drop 1 sorted)
-        in if length h == 2 && length i /= 2
-              then Just $ Pair1 (rank $ head h) a b c 
-              else Nothing
+pair1May :: [Card] -> Maybe Hand
+pair1May xs = do
+    (h:hs) <- Safe.takeExactMay 4 (clusterByRank xs)
+    (a:_) <- Safe.takeExactMay 2 h
+    (b:c:d:_) <- Safe.takeExactMay 3 (List.concat hs)
+    Just $ Pair1 (rank a) (rank b) (rank c) (rank d)
 
 
-mayPair2 :: [Card] -> Maybe Hand
-mayPair2 xs
-  | length xs > 7 || length xs < 5 = Nothing
-  | otherwise =
-        let sorted = List.sortBy (\a b -> compare (length b) (length a))
-                                 (groupByRank (List.sort xs))
-            h = head sorted
-            i = head $ drop 1 sorted
-            j = head $ drop 2 sorted
-            (a:_) = map rank $ revSort (List.concat $ drop 2 sorted)
-        in if length h == 2 && length i == 2 && length j /= 2
-              then Just $ Pair2 (rank $ head h) (rank $ head i) a
-              else Nothing
+pair2May :: [Card] -> Maybe Hand
+pair2May xs = do
+    (h:i:j:_) <- Safe.takeExactMay 3 (clusterByRank xs)
+    (a:_) <- Safe.takeExactMay 2 h
+    (b:_) <- Safe.takeExactMay 2 i
+    c <- Safe.headMay j
+    Just $ Pair2 (rank a) (rank b) (rank c)
 
 
-mayKind3 :: [Card] -> Maybe Hand
-mayKind3 xs
-  | length xs > 7 || length xs < 5 = Nothing
-  | otherwise =
-        let sorted = List.sortBy (\a b -> compare (length b) (length a))
-                                 (groupByRank (List.sort xs))
-            h = head sorted
-            i = head $ drop 1 sorted
-            (a:b:_) = map rank $ revSort (List.concat $ drop 1 sorted)
-        in if length h == 3 && length i /= 3
-              then Just $ Kind3 (rank $ head h) a b
-              else Nothing
+kind3May :: [Card] -> Maybe Hand
+kind3May xs = do
+    (h:hs) <- Safe.takeExactMay 3 (clusterByRank xs)
+    (a:_) <- Safe.takeExactMay 3 h
+    (b:c:_) <- Safe.takeExactMay 2 (List.concat hs)
+    Just $ Kind3 (rank a) (rank b) (rank c)
 
 
-groupByRank :: [Card] -> [[Card]]
-groupByRank = List.groupBy  (\x y -> rank x == rank y)
+straightMay :: [Card] -> Maybe Hand
+straightMay xs = do
+    let xs' = revSort $ List.nubBy (\a b -> rank a == rank b) xs
+    (a:_) <- Safe.headMay $ filter (\h -> length h == 5 && revConsecutive (map rank h))
+                                   (List.subsequences xs')
+    Just $ Straight (rank a)
+
+
+revConsecutive :: (Enum a, Eq a) => [a] -> Bool
+revConsecutive as = case as of
+    [] -> True;
+    [a] -> True
+    (a:b:as) -> a == succ b && revConsecutive (b:as) 
+
+
+flushMay :: [Card] -> Maybe Hand
+flushMay xs = do
+    h <- Safe.headMay (clusterBySuit xs)
+    (a:b:c:d:e:_) <- Safe.takeExactMay 5 (revSort h)
+    Just $ Flush (rank a) (rank b) (rank c) (rank d) (rank e)
+
+
+fHouseMay :: [Card] -> Maybe Hand
+fHouseMay xs = do
+    (h:i:_) <- Safe.takeExactMay 2 (clusterByRank xs)
+    (a:_) <- Safe.takeExactMay 3 h
+    (b:_) <- Safe.takeExactMay 2 i
+    Just $ FHouse (rank a) (rank b)
+
+
+kind4May :: [Card] -> Maybe Hand
+kind4May xs = do
+    (h:i:_) <- Safe.takeExactMay 2 (clusterByRank xs)
+    (a:_) <- Safe.takeExactMay 4 h
+    b <- Safe.headMay i
+    Just $ Kind4 (rank a) (rank b)
+
+
+sFlushMay :: [Card] -> Maybe Hand
+sFlushMay xs = do
+    xs' <- Safe.headMay (clusterBySuit xs)
+    Straight r <- flushMay xs'
+    Just $ SFlush r
+
+
+clusterByRank :: [Card] -> [[Card]]
+clusterByRank = List.sortBy (\a b -> compare (length b) (length a))
+              . List.groupBy (\x y -> rank x == rank y)
+              . revSort
+
+
+clusterBySuit :: [Card] -> [[Card]]
+clusterBySuit = List.sortBy (\a b -> compare (length b) (length a))
+              . List.groupBy (\x y -> suit x == suit y)
+              . List.sortBy (\a b -> cmp (suit a) (suit b))
+ where cmp a b = case a of C -> case b of C -> EQ; H -> LT; D -> LT; S -> LT
+                           H -> case b of C -> GT; H -> EQ; D -> LT; S -> LT
+                           D -> case b of C -> GT; H -> GT; D -> EQ; S -> LT
+                           S -> case b of C -> GT; H -> GT; D -> GT; S -> EQ
 
 
 revSort :: Ord a => [a] -> [a]
