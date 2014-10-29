@@ -151,5 +151,5 @@ mayKind3 xs
             i = head $ drop 1 sorted
             (a:b:_) = map rank (List.concat $ drop 1 sorted)
         in if length h == 3 && length i /= 3
-              then Just $ Pair1 (rank $ head h) a b
+              then Just $ Kind3 (rank $ head h) a b
               else Nothing
