@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
 module Zb0t.HoldEm
     ( Rank(..)
     , Suit(..)
