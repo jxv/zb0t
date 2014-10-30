@@ -1,67 +1,74 @@
 module Zb0t.Config
-  ( defPort
-  , defConfig
-  , makeConfig
-  ) where
+    ( defPort
+    , defConfig
+    , makeConfig
+    ) where
 
-----
 
-import Zb0t.Imports
 import Zb0t.Types
+import qualified Control.Monad.Trans.State as State
+import qualified Data.Maybe as Maybe
+import qualified Safe as Safe
 
-----
 
-getput :: (Monad m) => (a -> a) -> State (m a) ()
-getput f = get >>= \mst -> put (mst >>= \st -> return $ f st)
+getput :: (Monad m) => (a -> a) -> State.State (m a) ()
+getput f = do
+    mst <- State.get
+    State.put $ do
+        st <- mst 
+        return (f st)
 
-----
 
 defPort :: (Integral a) => a
 defPort = 6667
 
+
 defConfig :: Config
 defConfig = Config "" defPort [] "" Nothing
 
-----
 
 makeConfig :: [String] -> Either String Config
 makeConfig args =
-  let parsers = [parseServerAddr, parseServerPort, parseChannels, parseNick, parsePassword]
-      parse = foldl1 (>>) (map ($ args) parsers)
-  in execState parse (Right defConfig)
+    let parsers = [ parseServerAddr, parseServerPort
+                  , parseChannels, parseNick, parsePassword ]
+        parse = foldl1 (>>) (map ($ args) parsers)
+    in State.execState parse (Right defConfig)
 
-----
 
-parseServerAddr :: [String] -> State (Either String Config) ()
+parseServerAddr :: [String] -> State.State (Either String Config) ()
 parseServerAddr x = case x of
-  [] -> put (Left "No server address.")
-  ("-s":addr:_) -> getput $ \cfg -> cfg {cfgServerAddr = addr}
-  (_:args) -> parseServerAddr args 
+    [] -> State.put (Left "No server address.")
+    ("-s":addr:_) -> getput $ \cfg -> cfg {cfgServerAddr = addr}
+    (_:args) -> parseServerAddr args 
 
-parseServerPort :: [String] -> State (Either String Config) ()
+
+parseServerPort :: [String] -> State.State (Either String Config) ()
 parseServerPort x = case x of
-  [] -> return ()
-  ("-p":sport:_) -> getput $ \cfg -> cfg {cfgServerPort = fromMaybe defPort (readMay sport)}
-  ("-c":_) -> return ()
-  (_:args) -> parseServerPort args 
+    [] -> return ()
+    ("-p":sport:_) -> getput $ \cfg ->
+        cfg {cfgServerPort = Maybe.fromMaybe defPort (Safe.readMay sport)}
+    ("-c":_) -> return ()
+    (_:args) -> parseServerPort args 
 
-parseChannels :: [String] -> State (Either String Config) ()
+
+parseChannels :: [String] -> State.State (Either String Config) ()
 parseChannels x = case x of
-  [] -> return ()
-  ("-c":chans) -> getput $ \cfg -> cfg {cfgChannels = chans}
-  (_:args) -> parseChannels args
+    [] -> return ()
+    ("-c":chans) -> getput $ \cfg -> cfg {cfgChannels = chans}
+    (_:args) -> parseChannels args
 
-parseNick :: [String] -> State (Either String Config) ()
+
+parseNick :: [String] -> State.State (Either String Config) ()
 parseNick x = case x of
-  [] -> put (Left "No nick.")
-  ("-n":nick:_) -> getput $ \cfg -> cfg {cfgNick = nick}
-  ("-c":_) -> put (Left "No nick.")
-  (_:args) -> parseNick args
+    [] -> State.put (Left "No nick.")
+    ("-n":nick:_) -> getput $ \cfg -> cfg {cfgNick = nick}
+    ("-c":_) -> State.put (Left "No nick.")
+    (_:args) -> parseNick args
 
-parsePassword :: [String] -> State (Either String Config) ()
+
+parsePassword :: [String] -> State.State (Either String Config) ()
 parsePassword x = case x of
-  [] -> return ()
-  ("-w":pswd:_) -> getput $ \cfg -> cfg {cfgPassword = Just pswd}
-  ("-c":_) -> return ()
-  (_:args) -> parsePassword args 
-
+    [] -> return ()
+    ("-w":pswd:_) -> getput $ \cfg -> cfg {cfgPassword = Just pswd}
+    ("-c":_) -> return ()
+    (_:args) -> parsePassword args 

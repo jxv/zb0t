@@ -1,98 +1,105 @@
 {-# LANGUAGE OverloadedStrings #-}
-
 module Zb0t.Core
-  ( run
-  ) where
+    ( run
+    ) where
 
-----
+import           Control.Monad (when)
+import           GHC.IO.Handle (Handle)
+import           System.IO (hPutStrLn,hGetLine)
+import           System.IO.Error (catchIOError)
+import qualified Control.Concurrent as Conc
+import qualified Control.Concurrent.Chan as Conc
+import qualified Network as Network
+import qualified Network.IRC as IRC
+import qualified Data.ByteString as BS
 
-import Zb0t.Imports
+
 import Zb0t.Types
 import Zb0t.Say (zsay)
 
-----
 
 getConn :: Config -> IO (Maybe Handle)
-getConn (Config srv port _ _ _) =
-  do let conn = connectTo srv (PortNumber $ fromIntegral port)
-     (fmap Just conn) `catchIOError` (const $ return Nothing)
+getConn (Config srv port _ _ _) = do
+    let conn = Network.connectTo srv (Network.PortNumber $ fromIntegral port)
+    (fmap Just conn) `catchIOError` (const $ return Nothing)
 
-----
 
 run :: Config -> IO ()
-run cfg@(Config _ _ chans nck mpswd) = withSocketsDo $
-  do mconn <- getConn cfg
-     case mconn of
-       Nothing -> putStrLn "No connection."
-       Just conn ->
-         do chan <- newChan
+run cfg@(Config _ _ chans nck mpswd) = Network.withSocketsDo $ do
+    mconn <- getConn cfg
+    case mconn of
+        Nothing -> putStrLn "No connection."
+        Just conn -> do
+            chan <- Conc.newChan
             login nck mpswd chan
             join' chans chan
-            thdrecv <- forkIO (recv conn chan)
-            thdinput <- forkIO (input chan)
+            thdrecv <- Conc.forkIO (recv conn chan)
+            thdinput <- Conc.forkIO (input chan)
             send cfg conn chan
-            killThread thdrecv
-            killThread thdinput
+            Conc.killThread thdrecv
+            Conc.killThread thdinput
 
-----
 
-input :: Chan Event -> IO ()
-input chan =
-  do line <- getLine
-     writeChan chan (RawMessage line)
-     input chan
+input :: Conc.Chan Event -> IO ()
+input chan = do
+    line <- getLine
+    Conc.writeChan chan (RawMessage line)
+    input chan
 
-----
 
-login :: String -> Maybe String -> Chan Event -> IO ()
+login :: String -> Maybe String -> Conc.Chan Event -> IO ()
 login nck mpswd chan =
-  do writeChan chan (Send $ nickMsg nck)
-     writeChan chan (Send $ userMsg nck 0 "*" nck)
+  do Conc.writeChan chan (Send $ nickMsg nck)
+     Conc.writeChan chan (Send $ userMsg nck 0 "*" nck)
      case mpswd of 
         Nothing -> return ()
-        Just pswd -> writeChan chan (Send $ identifyMsg pswd)
+        Just pswd -> Conc.writeChan chan (Send $ identifyMsg pswd)
 
-join' :: [String] -> Chan Event -> IO ()
-join' chans chan = mapM_ (writeChan chan . Send . joinMsg) chans
 
-recv :: Handle -> Chan Event -> IO ()
-recv conn chan =
-  do again <- (recvMsg conn chan) `catchIOError` (const $ return False)
-     when again (recv conn chan)
+join' :: [String] -> Conc.Chan Event -> IO ()
+join' chans chan = mapM_ (Conc.writeChan chan . Send . joinMsg) chans
 
-recvMsg :: Handle -> Chan Event -> IO Bool 
+
+recv :: Handle -> Conc.Chan Event -> IO ()
+recv conn chan = do
+    again <- (recvMsg conn chan) `catchIOError` (const $ return False)
+    when again (recv conn chan)
+
+
+recvMsg :: Handle -> Conc.Chan Event -> IO Bool 
 recvMsg conn chan =
   do line <- hGetLine conn
      putStrLn line
-     case (decode $ toBString line) of
+     case (IRC.decode $ toBString line) of
        Nothing -> return ()
-       Just msg -> writeChan chan (Recv msg)
+       Just msg -> Conc.writeChan chan (Recv msg)
      return True
 
-----
 
-send :: Config -> Handle -> Chan Event -> IO ()
+send :: Config -> Handle -> Conc.Chan Event -> IO ()
 send cfg conn chan = 
   do again <- (sendMsg cfg conn chan) `catchIOError` (const $ return False)
      when again (send cfg conn chan)
 
-sendMsg :: Config -> Handle -> Chan Event -> IO Bool
+
+sendMsg :: Config -> Handle -> Conc.Chan Event -> IO Bool
 sendMsg cfg conn chan =
-  do event <- readChan chan
+  do event <- Conc.readChan chan
      case event of
-       Send msg -> do let m = toString (encode msg)
+       Send msg -> do let m = toString (IRC.encode msg)
                       putStrLn m
                       hPutStrLn conn m
                       return True
        Recv msg -> replyMsg cfg conn msg >> return True
        RawMessage msg -> hPutStrLn conn msg >> putStrLn msg >> return True
 
-replyMsg :: Config -> Handle -> Message -> IO ()
-replyMsg _ conn (Message Nothing cmd params)
+
+replyMsg :: Config -> Handle -> IRC.Message -> IO ()
+replyMsg _ conn (IRC.Message Nothing cmd params)
   | cmd == "PING" = reply "PONG"
   | otherwise = return ()
   where reply x = hPutStrLn conn x >> putStrLn x
-replyMsg (Config _ _ _ nck _) conn (Message (Just (NickName sender _ _)) cmd (recvr:msg))
+replyMsg (Config _ _ _ nck _) conn (IRC.Message (Just (IRC.NickName sender _ _)) cmd (recvr:msg))
   | cmd == "PRIVMSG" && prefixWith "zsay " (toString (head msg)) =
        reply $ "PRIVMSG " ++
                toString (if toString recvr == nck then sender else recvr) ++
@@ -102,34 +109,38 @@ replyMsg (Config _ _ _ nck _) conn (Message (Just (NickName sender _ _)) cmd (re
   where reply x = hPutStrLn conn x >> putStrLn x
 replyMsg _ _ _ = return ()
 
+
 prefixWith :: String -> String -> Bool
 prefixWith xs ys = and $ zipWith (==) xs ys
 
-----
 
-nickMsg :: String -> Message
-nickMsg n = Message Nothing "NICK" [toBString n]
+nickMsg :: String -> IRC.Message
+nickMsg n = IRC.Message Nothing "NICK" [toBString n]
 
-userMsg :: String -> Int -> String -> String -> Message
-userMsg u m t n = Message Nothing "USER" (map toBString [u, show m, t, ' ':n])
 
-identifyMsg :: String -> Message
-identifyMsg p = Message Nothing "PRIVMSG" ["nickserv", ":identify", toBString p]
+userMsg :: String -> Int -> String -> String -> IRC.Message
+userMsg u m t n = IRC.Message Nothing "USER" (map toBString [u, show m, t, ' ':n])
 
-zmsg :: String -> String -> Message
-zmsg target msg = Message Nothing "PRIVMSG" (map toBString [target, ' ':(zsay msg)])
 
-pongMsg :: Message
-pongMsg = Message Nothing "PONG" []
+identifyMsg :: String -> IRC.Message
+identifyMsg p = IRC.Message Nothing "PRIVMSG" ["nickserv", ":identify", toBString p]
 
-joinMsg :: String -> Message
-joinMsg chan = Message Nothing "JOIN" [toBString chan]
 
-----
+zmsg :: String -> String -> IRC.Message
+zmsg target msg = IRC.Message Nothing "PRIVMSG" (map toBString [target, ' ':(zsay msg)])
 
-toString :: ByteString -> String
-toString = map (toEnum . fromEnum) . unpack
 
-toBString :: String -> ByteString
-toBString = pack . map (toEnum . fromEnum)
+pongMsg :: IRC.Message
+pongMsg = IRC.Message Nothing "PONG" []
 
+
+joinMsg :: String -> IRC.Message
+joinMsg chan = IRC.Message Nothing "JOIN" [toBString chan]
+
+
+toString :: BS.ByteString -> String
+toString = map (toEnum . fromEnum) . BS.unpack
+
+
+toBString :: String -> BS.ByteString
+toBString = BS.pack . map (toEnum . fromEnum)

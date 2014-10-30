@@ -1,10 +1,8 @@
 module Zb0t.Types where
 
-----
 
-import Zb0t.Imports
+import qualified Network.IRC as IRC
 
-----
 
 data Config = Config
   { cfgServerAddr :: String
@@ -14,8 +12,9 @@ data Config = Config
   , cfgPassword :: Maybe String
   } deriving (Show, Eq)
 
+
 data Event 
-  = Send Message 
-  | Recv Message
+  = Send IRC.Message 
+  | Recv IRC.Message
   | RawMessage String
 

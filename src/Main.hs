@@ -1,6 +1,7 @@
 module Main (main) where
 
-import Zb0t.Imports
+import System.Environment (getProgName,getArgs)
+
 import Zb0t.Config (makeConfig)
 import Zb0t.Core (run)
 
