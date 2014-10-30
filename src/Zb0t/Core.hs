@@ -16,6 +16,7 @@ import qualified Data.ByteString as BS
 
 import Zb0t.Types
 import Zb0t.Say (zsay)
+import qualified Zb0t.HoldEm as HoldEm
 
 
 getConn :: Config -> IO (Maybe Handle)

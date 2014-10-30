@@ -1,4 +1,4 @@
-module HoldEm
+module Zb0t.HoldEm
     ( Rank(..)
     , Suit(..)
     , Card(..)
