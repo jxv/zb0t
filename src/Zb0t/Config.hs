@@ -5,10 +5,14 @@ module Zb0t.Config
     ) where
 
 
-import Zb0t.Types
+import           Control.Applicative hiding ((<|>))
 import qualified Control.Monad.Trans.State as State
 import qualified Data.Maybe as Maybe
 import qualified Safe as Safe
+import qualified Text.Parsec as Parsec
+import qualified Text.Parsec.String as Parsec
+
+import Zb0t.Types
 
 
 getput :: (Monad m) => (a -> a) -> State.State (m a) ()

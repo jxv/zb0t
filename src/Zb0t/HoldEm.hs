@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module Zb0t.HoldEm
     ( Rank(..)
     , Suit(..)
@@ -21,11 +22,11 @@ import qualified Safe.Exact as Safe
 
 
 data Rank = R2 | R3 | R4 | R5 | R6 | R7 | R8 | R9 | R10 | J | Q | K | A
-        deriving (Show, Enum, Ord, Bounded, Eq)
+        deriving (Enum, Ord, Bounded, Eq)
 
 
 data Suit = C | H | D | S
-        deriving (Show, Enum, Bounded, Eq)
+        deriving (Enum, Bounded, Eq)
 
 
 data Card = Card { rank :: Rank, suit :: Suit }
@@ -56,8 +57,17 @@ data Table = Table
     } deriving (Show, Eq)
 
 
+instance Show Rank where
+    show r = case r of
+        R2 -> "2"; R3 -> "3"; R4 -> "4"; R5 -> "5"; R6 -> "6"; R7 -> "7"; R8 -> "8"
+        R9 -> "9"; R10 -> "10"; J -> "J"; Q -> "Q"; K -> "K"; A -> "A"
+
+instance Show Suit where
+    show s = case s of C -> "c"; H -> "h"; D -> "d"; S -> "s"
+
+
 instance Show Card where
-    show (Card r s) = (show r) ++ "-" ++ (show s)
+    show (Card r s) = (show r) ++ (show s)
 
 
 instance Ord Card where
@@ -65,23 +75,49 @@ instance Ord Card where
 
 
 instance Ord Hand where
-    compare (SFlush a) (SFlush b) = compare a b
-    compare (SFlush _) _ = GT
-    compare (Kind4 a b) (Kind4 v w) = compare2 (a,b) (v,w)
-    compare (Kind4 _ _) _ = GT
-    compare (FHouse a b) (FHouse v w) = compare2 (a,b) (v,w)
-    compare (FHouse _ _) _ = GT
-    compare (Flush a b c d e) (Flush v w x y z) = compare5 (a,b,c,d,e) (v,w,x,y,z)
-    compare (Flush _ _ _ _ _) _ = GT
-    compare (Straight a) (Straight v) = compare a v
-    compare (Straight _) _ = GT
-    compare (Kind3 a b c) (Kind3 v w x) = compare3 (a,b,c) (v,w,x)
-    compare (Kind3 _ _ _) _ = GT
-    compare (Pair2 a b c) (Pair2 v w x) = compare3 (a,b,c) (v,w,x)
-    compare (Pair2 _ _ _) _ = GT
-    compare (Pair1 a b c d) (Pair1 v w x y) = compare4 (a,b,c,d) (v,w,x,y)
-    compare (Pair1 _ _ _ _) _ = GT
-    compare (High a b c d e) (High v w x y z) = compare5 (a,b,c,d,e) (v,w,x,y,z)
+    compare (SFlush a) = \case
+        SFlush b -> compare a b
+        _ -> GT
+    compare (Kind4 a b) = \case
+        Kind4 v w -> compare2 (a,b) (v,w)
+        SFlush{} -> LT
+        _ -> GT
+    compare (FHouse a b) = \case
+        FHouse v w -> compare2 (a,b) (v,w)
+        SFlush{} -> LT
+        Kind4{} -> LT
+        _ -> GT
+    compare (Flush a b c d e) = \case
+        Flush v w x y z -> compare5 (a,b,c,d,e) (v,w,x,y,z)
+        SFlush{} -> LT
+        Kind4{} -> LT
+        FHouse{} -> LT
+        _ -> GT
+    compare (Straight a) = \case
+        Straight v -> compare a v
+        SFlush{} -> LT
+        Kind4{} -> LT
+        FHouse{} -> LT
+        Flush{} -> LT
+        _ -> GT
+    compare (Kind3 a b c) = \case
+        Kind3 v w x -> compare3 (a,b,c) (v,w,x)
+        Pair2{} -> GT
+        Pair1{} -> GT
+        High{} -> GT
+        _ -> LT
+    compare (Pair2 a b c) = \case
+        Pair2 v w x -> compare3 (a,b,c) (v,w,x)
+        Pair1{} -> GT
+        High{} -> GT
+        _ -> LT
+    compare (Pair1 a b c d) = \case
+        Pair1 v w x y -> compare4 (a,b,c,d) (v,w,x,y)
+        High{} -> GT
+        _ -> LT
+    compare (High a b c d e) = \case
+        High v w x y z -> compare5 (a,b,c,d,e) (v,w,x,y,z)
+        _ -> LT
 
 
 compare2 :: (Rank, Rank) -> (Rank, Rank) -> Ordering
