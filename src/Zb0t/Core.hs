@@ -106,14 +106,46 @@ replyMsg (Config _ _ _ nck _) conn (IRC.Message (Just (IRC.NickName sender _ _))
        reply $ privmsg (zsay . drop 5 . unwords . map toString $ msg)
   | cmd == "PRIVMSG" && prefixWith (nck ++ " best-hand ") (toString (head msg)) =
        reply $ privmsg (solveBestHand $ drop (length nck + length (" best-hand " :: String)) $ unwords $ map toString msg)
+  | cmd == "PRIVMSG" && prefixWith (nck ++ " will you open ") (toString (head msg)) = hal9000 
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ", will you open ") (toString (head msg)) = hal9000
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ": will you open ") (toString (head msg)) = hal9000
+  | cmd == "PRIVMSG" && prefixWith (nck ++ " can you open ") (toString (head msg)) = hal9000
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ", can you open ") (toString (head msg)) = hal9000
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ": can you open ") (toString (head msg)) = hal9000
+  | cmd == "PRIVMSG" && prefixWith (nck ++ " may you open ") (toString (head msg)) = hal9000
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ", may you open ") (toString (head msg)) = hal9000
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ": may you open ") (toString (head msg)) = hal9000
+  | cmd == "PRIVMSG" && prefixWith (nck ++ " was ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ", was ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ": was ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ " were ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ", were ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ": were ") (toString (head msg)) = magic8ball
   | cmd == "PRIVMSG" && prefixWith (nck ++ " will ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ", will ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ": will ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ " is ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ", is ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ": is ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ " are ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ", are ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ": are ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ " can ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ", can ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ": can ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ " have ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ", have ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ": have ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ " has ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ", has ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" && prefixWith (nck ++ ": has ") (toString (head msg)) = magic8ball
   | otherwise = return ()
   where reply x = hPutStrLn conn x >> putStrLn x
-        privmsg m = "PRIVMSG " ++ 
-                    toString (if toString recvr == nck then sender else recvr) ++
-                    " :" ++ m
-        magic8ball = do answer <- anyElem ["yes", "no", "ask zear", "sometimes", "try again", "correct", "postive", "negative", "negatory", "that's a no-no, nacy", "ask again", "maybe?", "huh?", "sure", "nope", "yeah", "yup", "yes", "no"]
+        asker = toString (if toString recvr == nck then sender else recvr)
+        privmsg m = "PRIVMSG " ++  asker ++ " :" ++ m
+        magic8ball = do answer <- anyElem ["yes", "no", "idk. ask zear", "sometimes", "sorry, what?", "correct", "probably", "pository", "negatory", "that's a no-no, Nancy", "ask again", "maybe...", "huh?", "sure", "nope", "yeah", "yup", "yes", "no"]
                         reply $ privmsg answer
+        hal9000 = reply . privmsg $ "sorry, I can't do that, " ++ toString sender
 replyMsg _ _ _ = return ()
 
 
