@@ -12,6 +12,7 @@ import qualified Control.Concurrent.Chan as Conc
 import qualified Network as Network
 import qualified Network.IRC as IRC
 import qualified Data.ByteString as BS
+import qualified System.Random as Random
 
 
 import Zb0t.Types
@@ -102,13 +103,27 @@ replyMsg _ conn (IRC.Message Nothing cmd params)
   where reply x = hPutStrLn conn x >> putStrLn x
 replyMsg (Config _ _ _ nck _) conn (IRC.Message (Just (IRC.NickName sender _ _)) cmd (recvr:msg))
   | cmd == "PRIVMSG" && prefixWith "zsay " (toString (head msg)) =
-       reply $ "PRIVMSG " ++
-               toString (if toString recvr == nck then sender else recvr) ++
-               " :" ++
-               (zsay . drop 5 . unwords . map toString $ msg)
+       reply $ privmsg (zsay . drop 5 . unwords . map toString $ msg)
+  | cmd == "PRIVMSG" && prefixWith (nck ++ " best-hand ") (toString (head msg)) =
+       reply $ privmsg (solveBestHand $ drop (length nck + length (" best-hand " :: String)) $ unwords $ map toString msg)
+  | cmd == "PRIVMSG" && prefixWith (nck ++ " will ") (toString (head msg)) = magic8ball
   | otherwise = return ()
   where reply x = hPutStrLn conn x >> putStrLn x
+        privmsg m = "PRIVMSG " ++ 
+                    toString (if toString recvr == nck then sender else recvr) ++
+                    " :" ++ m
+        magic8ball = do answer <- anyElem ["yes", "no", "ask zear", "sometimes", "try again", "correct", "postive", "negative", "negatory", "that's a no-no, nacy", "ask again", "maybe?", "huh?", "sure", "nope", "yeah", "yup", "yes", "no"]
+                        reply $ privmsg answer
 replyMsg _ _ _ = return ()
+
+
+anyElem :: [b] -> IO b
+anyElem xs = do idx <- Random.randomRIO (0, length xs -1)
+                return $ xs !! idx
+
+
+solveBestHand :: String -> String
+solveBestHand _ = "fold, human"
 
 
 prefixWith :: String -> String -> Bool
