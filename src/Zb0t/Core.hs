@@ -1,9 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE MultiWayIf #-}
 module Zb0t.Core
     ( run
     ) where
 
 import           Control.Monad (when)
+import           Control.Applicative hiding ((<|>))
 import           GHC.IO.Handle (Handle)
 import           System.IO (hPutStrLn,hGetLine)
 import           System.IO.Error (catchIOError)
@@ -13,6 +15,8 @@ import qualified Network as Network
 import qualified Network.IRC as IRC
 import qualified Data.ByteString as BS
 import qualified System.Random as Random
+import qualified Text.Parsec as Parsec
+import           Text.Parsec ((<|>))
 
 
 import Zb0t.Types
@@ -20,24 +24,26 @@ import Zb0t.Say (zsay)
 import HoldEm as Poker
 
 
-getConn :: Config -> IO (Maybe Handle)
-getConn (Config srv port _ _ _) = do
-    let conn = Network.connectTo srv (Network.PortNumber $ fromIntegral port)
-    (fmap Just conn) `catchIOError` (const $ return Nothing)
+
+
+connect :: Config -> IO (Maybe Handle)
+connect (Config srv port _ _ _) = do
+    let handle = Network.connectTo srv (Network.PortNumber $ fromIntegral port)
+    (fmap Just handle) `catchIOError` (const $ return Nothing)
 
 
 run :: Config -> IO ()
 run cfg@(Config _ _ chans nck mpswd) = Network.withSocketsDo $ do
-    mconn <- getConn cfg
-    case mconn of
+    mhandle <- connect cfg
+    case mhandle of
         Nothing -> putStrLn "No connection."
-        Just conn -> do
+        Just handle -> do
             chan <- Conc.newChan
             login nck mpswd chan
             join' chans chan
-            thdrecv <- Conc.forkIO (recv conn chan)
+            thdrecv <- Conc.forkIO (recv handle chan)
             thdinput <- Conc.forkIO (input chan)
-            send cfg conn chan
+            send cfg handle chan
             Conc.killThread thdrecv
             Conc.killThread thdinput
 
@@ -106,46 +112,29 @@ replyMsg (Config _ _ _ nck _) conn (IRC.Message (Just (IRC.NickName sender _ _))
        reply $ privmsg (zsay . drop 5 . unwords . map toString $ msg)
   | cmd == "PRIVMSG" && prefixWith (nck ++ " best-hand ") (toString (head msg)) =
        reply $ privmsg (solveBestHand $ drop (length nck + length (" best-hand " :: String)) $ unwords $ map toString msg)
-  | cmd == "PRIVMSG" && prefixWith (nck ++ " will you open ") (toString (head msg)) = hal9000 
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ", will you open ") (toString (head msg)) = hal9000
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ": will you open ") (toString (head msg)) = hal9000
-  | cmd == "PRIVMSG" && prefixWith (nck ++ " can you open ") (toString (head msg)) = hal9000
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ", can you open ") (toString (head msg)) = hal9000
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ": can you open ") (toString (head msg)) = hal9000
-  | cmd == "PRIVMSG" && prefixWith (nck ++ " may you open ") (toString (head msg)) = hal9000
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ", may you open ") (toString (head msg)) = hal9000
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ": may you open ") (toString (head msg)) = hal9000
-  | cmd == "PRIVMSG" && prefixWith (nck ++ " was ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ", was ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ": was ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ " were ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ", were ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ": were ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ " will ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ", will ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ": will ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ " is ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ", is ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ": is ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ " are ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ", are ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ": are ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ " can ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ", can ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ": can ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ " have ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ", have ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ": have ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ " has ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ", has ") (toString (head msg)) = magic8ball
-  | cmd == "PRIVMSG" && prefixWith (nck ++ ": has ") (toString (head msg)) = magic8ball
+  | cmd == "PRIVMSG" = if
+       | any (flip addressing msg') hal9000Prefixes -> hal9000
+       | any (flip addressing msg') magic8Prefixes -> magic8ball
+       | otherwise -> return ()
   | otherwise = return ()
-  where reply x = hPutStrLn conn x >> putStrLn x
-        asker = toString (if toString recvr == nck then sender else recvr)
-        privmsg m = "PRIVMSG " ++  asker ++ " :" ++ m
-        magic8ball = do answer <- anyElem ["yes", "no", "idk. ask zear", "sometimes", "sorry, what?", "correct", "probably", "pository", "negatory", "that's a no-no, Nancy", "ask again", "maybe...", "huh?", "sure", "nope", "yeah", "yup", "yes", "no"]
-                        reply $ privmsg answer
-        hal9000 = reply . privmsg $ "sorry, I can't do that, " ++ toString sender
+  where
+    addressing m r = prefixWith (nck ++ " " ++ m)  r ||
+                     prefixWith (nck ++ ", " ++ m) r ||
+                     prefixWith (nck ++ ": " ++ m) r
+    msg' = toString (head msg)
+    hal9000Prefixes = ["will you open ", "can you open ", "may you open "]
+    magic8Prefixes = ["was ","were ","will ","do ","did ","does ","is ","are ","can ","have ",
+                      "has "]
+    reply x = hPutStrLn conn x >> putStrLn x
+    asker = toString (if toString recvr == nck then sender else recvr)
+    privmsg m = "PRIVMSG " ++  asker ++ " :" ++ m
+    magic8ball = do answer <- anyElem ["yes", "no", "idk. ask zear", "sometimes",
+                                       "correct", "probably", "pository", "negatory",
+                                       "possibly. query the pcercuei. he would know.",
+                                       "maybe...", "huh?", "sure", "nope", "yeah", "yup",
+                                       "yes", "no"]
+                    reply $ privmsg answer
+    hal9000 = reply . privmsg $ "sorry, I can't do that, " ++ toString sender
 replyMsg _ _ _ = return ()
 
 
