@@ -62,7 +62,7 @@ shameless channel chan = do
     Conc.threadDelay (r * 1000000)
     shameless channel chan
  where
-    sayings = ["hueueueueue","lol","curvature","zbln","woop woop woop"]
+    sayings = ["hueueueueue","lol","curvature","zbln","woop woop woop","hi","hello","hey"]
 
 
 input :: Conc.Chan Event -> IO ()
