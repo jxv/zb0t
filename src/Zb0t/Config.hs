@@ -11,6 +11,7 @@ import qualified Data.Maybe as Maybe
 import qualified Safe as Safe
 import qualified Text.Parsec as Parsec
 import qualified Text.Parsec.String as Parsec
+import           Text.Parsec ((<|>))
 
 import Zb0t.Types
 
@@ -75,4 +76,8 @@ parsePassword x = case x of
     [] -> return ()
     ("-w":pswd:_) -> getput $ \cfg -> cfg {cfgPassword = Just pswd}
     ("-c":_) -> return ()
-    (_:args) -> parsePassword args 
+    (_:args) -> parsePassword args
+
+
+_parseChannel :: Parsec.Parser String
+_parseChannel = return ""
