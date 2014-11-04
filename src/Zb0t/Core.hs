@@ -55,10 +55,11 @@ run cfg@(Config _ _ chans nck mpswd) = Net.withSocketsDo $ do
 
 shameless :: String -> Conc.Chan Event -> IO ()
 shameless channel chan = do
-    r <- Random.randomRIO (900, 9000)
-    Conc.threadDelay (r * 1000000)
     saying <- anyElem sayings
-    let msg = IRC.Message Nothing "PRIVMSG" [BS.pack channel, saying]
+    let evt = Send $ IRC.Message Nothing "PRIVMSG" [BS.pack channel, saying]
+    Conc.writeChan chan evt
+    r <- Random.randomRIO (10, 300 * 12)
+    Conc.threadDelay (r * 1000000)
     shameless channel chan
  where
     sayings = ["hueueueueue","lol","curvature","zbln","woop woop woop"]
