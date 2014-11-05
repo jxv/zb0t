@@ -46,6 +46,7 @@ run cfg@(Config _ _ chans nck mpswd) = Net.withSocketsDo $ do
             joinChannel chans chan
             thdrecv <- Conc.forkIO (recv handle chan)
             thdinput <- Conc.forkIO (input chan)
+            mapM_ (Conc.forkIO . flip introduction chan) chans
             thds <- mapM (Conc.forkIO . flip shameless chan) chans
             send cfg handle chan
             mapM_ Conc.killThread thds
@@ -53,13 +54,22 @@ run cfg@(Config _ _ chans nck mpswd) = Net.withSocketsDo $ do
             Conc.killThread thdinput
 
 
-shameless :: String -> Conc.Chan Event -> IO ()
-shameless channel chan = do
+introduction :: String -> Conc.Chan Event -> IO ()
+introduction channel chan = do
     saying <- anyElem sayings
     let evt = Send $ IRC.Message Nothing "PRIVMSG" [BS.pack channel, saying]
     Conc.writeChan chan evt
-    r <- Random.randomRIO (10, 300 * 12)
+ where
+    sayings = ["hi","hello","hey","hola"]
+
+
+shameless :: String -> Conc.Chan Event -> IO ()
+shameless channel chan = do
+    r <- Random.randomRIO (300 * 12, 300 * 24)
     Conc.threadDelay (r * 1000000)
+    saying <- anyElem sayings
+    let evt = Send $ IRC.Message Nothing "PRIVMSG" [BS.pack channel, saying]
+    Conc.writeChan chan evt
     shameless channel chan
  where
     sayings = ["hueueueueue","lol","curvature","zbln","woop woop woop","hi","hello","hey"]
