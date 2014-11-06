@@ -21,12 +21,13 @@ import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified Data.List as L
 import qualified System.Random as Random
 import qualified Text.Parsec as Parsec
+import qualified Text.Parsec.String as Parsec
 import           Text.Parsec ((<|>))
 
 
 import Zb0t.Types
 import Zb0t.Say (zsay)
-import HoldEm as Poker
+import qualified Zb0t.Poker as Poker
 
 
 connect :: Config -> IO (Maybe Handle)
@@ -149,13 +150,13 @@ replyMsg (Config _ _ _ nck _) conn (IRC.Message (Just (IRC.NickName sender _ _))
                      prefixWith (nck ++ ", " ++ m) r ||
                      prefixWith (nck ++ ": " ++ m) r
     msg' = BS.unpack $ head msg
-    hal9000Prefixes = ["will you open ", "can you open ", "may you open "]
+    hal9000Prefixes = ["will you open ", "can you open ", "may you open ","open the "]
     magic8Prefixes = ["was ","were ","will ","do ","did ","does ","is ","are ","can ","have ",
-                      "has "]
+                      "has ","would ","could "]
     reply x = hPutStrLn conn x >> putStrLn x
     asker = BS.unpack (if BS.unpack recvr == nck then sender else recvr)
     privmsg m = "PRIVMSG " ++  asker ++ " :" ++ m
-    magic8ball = do answer <- anyElem ["yes", "no", "idk. ask zear", "sometimes",
+    magic8ball = do answer <- anyElem ["yes", "no", "idk. ask zrkw", "sometimes",
                                        "correct", "probably", "pository", "negatory",
                                        "possibly. query the pcercuei. he would know.",
                                        "maybe...", "huh?", "sure", "nope", "yeah", "yup",
