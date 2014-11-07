@@ -5,23 +5,15 @@ module Zb0t.Config
     ) where
 
 
+import           Control.Monad.Fix (fix)
 import           Control.Applicative hiding ((<|>))
-import qualified Control.Monad.Trans.State as State
-import qualified Data.Maybe as Maybe
-import qualified Safe as Safe
-import qualified Text.Parsec as Parsec
-import qualified Text.Parsec.String as Parsec
-import           Text.Parsec ((<|>))
+import           Data.Functor (void)
+import qualified Data.List as List
+import           Text.Parsec.String (Parser)
+import           Text.Parsec ((<|>), string, parserFail, manyTill, anyChar, option, try,
+                              skipMany, parse, newline, eof, digit, many1, ParseError)
 
 import Zb0t.Types
-
-
-getput :: (Monad m) => (a -> a) -> State.State (m a) ()
-getput f = do
-    mst <- State.get
-    State.put $ do
-        st <- mst 
-        return (f st)
 
 
 defPort :: (Integral a) => a
@@ -33,51 +25,64 @@ defConfig = Config "" defPort [] "" Nothing
 
 
 makeConfig :: [String] -> Either String Config
-makeConfig args =
-    let parsers = [ parseServerAddr, parseServerPort
-                  , parseChannels, parseNick, parsePassword ]
-        parse = foldl1 (>>) (map ($ args) parsers)
-    in State.execState parse (Right defConfig)
+makeConfig args = case parseConfig args of
+    Left _ -> Left "Bad args."
+    Right cfg -> Right cfg
 
 
-parseServerAddr :: [String] -> State.State (Either String Config) ()
-parseServerAddr x = case x of
-    [] -> State.put (Left "No server address.")
-    ("-s":addr:_) -> getput $ \cfg -> cfg {cfgServerAddr = addr}
-    (_:args) -> parseServerAddr args 
+parseConfig :: [String] -> Either ParseError Config
+parseConfig = parse config "" . (List.concat . List.intersperse "\n")
 
 
-parseServerPort :: [String] -> State.State (Either String Config) ()
-parseServerPort x = case x of
-    [] -> return ()
-    ("-p":sport:_) -> getput $ \cfg ->
-        cfg {cfgServerPort = Maybe.fromMaybe defPort (Safe.readMay sport)}
-    ("-c":_) -> return ()
-    (_:args) -> parseServerPort args 
+config :: Parser Config
+config = do
+    s <- server
+    p <- option defPort port
+    n <- nick
+    w <- option Nothing password
+    c <- option [] channels
+    return $ Config s p c n w
 
 
-parseChannels :: [String] -> State.State (Either String Config) ()
-parseChannels x = case x of
-    [] -> return ()
-    ("-c":chans) -> getput $ \cfg -> cfg {cfgChannels = chans}
-    (_:args) -> parseChannels args
+server :: Parser String
+server = do
+    flags ["-s","--server"]
+    void newline
+    manyTill anyChar (void newline)
 
 
-parseNick :: [String] -> State.State (Either String Config) ()
-parseNick x = case x of
-    [] -> State.put (Left "No nick.")
-    ("-n":nick:_) -> getput $ \cfg -> cfg {cfgNick = nick}
-    ("-c":_) -> State.put (Left "No nick.")
-    (_:args) -> parseNick args
+port :: Parser Integer
+port = do
+    flags ["-p","--port"]
+    void newline
+    p <- many1 digit
+    void newline
+    return (read p)
 
 
-parsePassword :: [String] -> State.State (Either String Config) ()
-parsePassword x = case x of
-    [] -> return ()
-    ("-w":pswd:_) -> getput $ \cfg -> cfg {cfgPassword = Just pswd}
-    ("-c":_) -> return ()
-    (_:args) -> parsePassword args
+nick :: Parser String
+nick = do
+    flags ["-n","--nick","--nickname"]
+    void newline
+    manyTill anyChar (void newline <|> eof)
 
 
-_parseChannel :: Parsec.Parser String
-_parseChannel = return ""
+password :: Parser (Maybe String)
+password = do
+    flags ["-w","--pass","--passwd","--password"]
+    void newline
+    Just <$> manyTill anyChar (void newline <|> eof)
+
+
+channels :: Parser [String]
+channels = do
+    flags ["-c","--channel","--channels"]
+    void newline
+    fix $ \loop -> do
+        c <- manyTill anyChar (void newline <|> eof) 
+        (eof *> return [c]) <|> (do cs <- loop
+                                    return (c : cs))
+
+
+flags :: [String] -> Parser ()
+flags = void . foldr (\n ns -> ns <|> try (string n)) (parserFail "no flag elements") 
