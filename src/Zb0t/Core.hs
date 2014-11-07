@@ -73,7 +73,7 @@ shameless channel chan = do
     Conc.writeChan chan evt
     shameless channel chan
  where
-    sayings = ["hueueueueue","lol","curvature","zbln","woop woop woop","hi","hello","hey"]
+    sayings = ["hueueueueue","lol","curvature","zbrt","woop woop woop","hi","hello","hey","zqck"]
 
 
 input :: Conc.Chan Event -> IO ()
