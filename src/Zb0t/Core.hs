@@ -1,9 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE LambdaCase #-}
 module Zb0t.Core
     ( run
     ) where
 
+import           Data.Functor (void)
 import           Control.Monad (when)
 import           Control.Applicative hiding ((<|>), join)
 import           GHC.IO.Handle (Handle)
@@ -20,14 +22,26 @@ import qualified Data.ByteString.Lazy as BL hiding (pack, unpack)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified Data.List as L
 import qualified System.Random as Random
+import           Text.Parsec ((<|>), string, parserFail, manyTill, anyChar, option, try,
+                              skipMany, parse, newline, eof, digit, many1, ParseError,
+                              choice, space, skipMany, skipMany1)
 import qualified Text.Parsec as Parsec
+import qualified Text.Parsec.Combinator as Parsec
 import qualified Text.Parsec.String as Parsec
-import           Text.Parsec ((<|>))
 
 
 import Zb0t.Types
 import Zb0t.Say (zsay)
 import qualified Zb0t.Poker as Poker
+
+
+data CommandTag
+    = PING
+    | PONG
+    | PRIVMSG
+
+
+type Parser = Parsec.ParsecT String () IO
 
 
 connect :: Config -> IO (Maybe Handle)
@@ -79,6 +93,14 @@ shameless channel chan = do
 interruptions :: [BS.ByteString]
 interruptions =
     ["hueueueueue","lol","curvature","zbrt","woop woop woop","zqck"] ++ introductions
+
+
+commandMay :: BS.ByteString -> Maybe CommandTag
+commandMay = \case
+    "PING" -> Just PING
+    "PONG" -> Just PONG
+    "PRIVMSG" -> Just PRIVMSG
+    _ -> Nothing
 
 
 input :: Conc.Chan Event -> IO ()
@@ -143,8 +165,6 @@ replyMsg _ conn (IRC.Message Nothing cmd params)
 replyMsg (Config _ _ _ nck _) conn (IRC.Message (Just (IRC.NickName sender _ _)) cmd (recvr:msg))
   | cmd == "PRIVMSG" && prefixWith "zsay " (BS.unpack $ head msg) =
        reply $ privmsg (zsay . drop 5 . unwords . map BS.unpack $ msg)
-  | cmd == "PRIVMSG" && prefixWith (nck ++ " best-hand ") (BS.unpack $ head msg) =
-       reply $ privmsg (solveBestHand $ drop (length nck + length (" best-hand " :: String)) $ unwords $ map BS.unpack msg)
   | cmd == "PRIVMSG" = if
        | any (flip addressing msg') hal9000Prefixes -> hal9000
        | any (flip addressing msg') magic8Prefixes -> magic8ball
@@ -161,19 +181,78 @@ replyMsg (Config _ _ _ nck _) conn (IRC.Message (Just (IRC.NickName sender _ _))
     reply x = hPutStrLn conn x >> putStrLn x
     asker = BS.unpack (if BS.unpack recvr == nck then sender else recvr)
     privmsg m = "PRIVMSG " ++  asker ++ " :" ++ m
-    magic8ball = do answer <- anyElem ["yes", "no", "idk. ask zrkw", "sometimes",
-                                       "correct", "probably", "pository", "negatory",
-                                       "possibly. query the pcercuei. he would know.",
-                                       "maybe...", "huh?", "sure", "nope", "yeah", "yup",
-                                       "yes", "no"]
-                    reply $ privmsg answer
-    hal9000 = reply . privmsg $ "sorry, I can't do that, " ++ BS.unpack sender
+    magic8ball = (reply . privmsg) =<< magic8Response
+    hal9000 = (reply . privmsg) (hal9000Response $ BS.unpack sender)
 replyMsg _ _ _ = return ()
 
 
+replyMsg' :: Config -> IRC.Message -> Conc.Chan Event -> IO ()
+replyMsg' config msg@(IRC.Message mPrefix command params) chan = do
+    let other str = do
+            Conc.writeChan chan $
+                Send (IRC.Message Nothing "PRIVMSG" [BS.pack "", BS.pack str])
+    case commandMay command of
+        Nothing -> return ()
+        Just PING -> Conc.writeChan chan (Send pongMsg)
+        Just PONG -> return ()
+        Just PRIVMSG -> do res <- Parsec.runPT pfun () "" (BS.unpack $ params !! 1)
+                           either (const $ return ()) other res
+
+
+pfun :: Parser String
+pfun = parserFail ""
+
+
+addressSuffix :: Parser String
+addressSuffix = strings [" ",", ",": "]
+
+
+pingP :: Parser String
+pingP = string "PING"
+
+
+pongP :: Parser String
+pongP = string "PONG"
+
+
+privmsgP :: Parser String
+privmsgP = string "PRIVMSG"
+
+
+zsayP :: Parser String
+zsayP = string "zsay"
+
+
+strings :: [String] -> Parser String
+strings = choice . map string
+
+
+hal9000Prefix :: Parser String
+hal9000Prefix = strings
+    ["will you open", "can you open", "may you open","open the"]
+
+
+magic8Prefix :: Parser String
+magic8Prefix = strings
+    ["was","were ","will","do","did","does","is","are","can","have","has","would "
+    ,"could "]
+
+
+magic8Response :: IO String
+magic8Response = anyElem
+    ["yes","no","idk. ask zrkw","sometimes","correct","probably","pository","negatory"
+    ,"possibly. query the pcercuei. he would know.","maybe...", "huh?", "sure", "nope"
+    ,"yeah", "yup","yes", "no"]
+
+
+hal9000Response :: String -> String
+hal9000Response = (++ "sorry, I can't do that, ")
+
+
 anyElem :: [b] -> IO b
-anyElem xs = do idx <- Random.randomRIO (0, length xs -1)
-                return $ xs !! idx
+anyElem xs = do
+    idx <- Random.randomRIO (0, length xs -1)
+    return $ xs !! idx
 
 
 solveBestHand :: String -> String

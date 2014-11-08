@@ -78,3 +78,52 @@ data Move
     | Raise Integer
     deriving (Show, Eq)
 
+
+data Chip
+    = Dealer
+    | SmallBlind
+    | BigBlind
+    deriving (Show, Eq)
+
+
+data Player = Player
+    { _points :: Integer
+    , _pHand :: HoldEm.PHand 
+    } deriving (Show, Eq)
+
+
+data Pot = Pot
+    { _contributors :: [Int]
+    , _totalValue:: Integer
+    } deriving (Show, Eq)
+
+
+data Config = Config
+    { _playerNames :: [String]
+    } deriving (Show, Eq)
+
+
+data Game = Game
+    { _config :: Config
+    , _lastChange :: Int
+    , _turn :: Int
+    , _ante :: Integer
+    , _pots :: [Pot]
+    , _playerOrder :: [Int]
+    , _players :: Map.Map Int Player
+    , _playerPlaying :: Map.Map Int Bool
+    , _playerChips :: Map.Map Int Chip
+    } deriving (Show, Eq)
+
+
+makeLenses ''Player
+makeLenses ''Pot
+makeLenses ''Config
+makeLenses ''Game
+
+
+doMove :: Int -> Game -> Move -> Game
+doMove n g m = case m of
+    Check -> g & over turn (+1)
+    FoldMove -> g & over turn (+1)
+    Raise value -> g & over turn (+1)
