@@ -184,7 +184,7 @@ response :: String -> String -> Parser String
 response self sender = foldr1 (<|>)
     [ try $ zsayP >> space >> say
     , do strings (map BS.unpack introductions)
-         void space
+         void $ many1 space
          void $ string self
          liftIO (anyElem $ map BS.unpack introductions)
     , addressResponse self sender
@@ -197,10 +197,10 @@ addressResponse self sender = do
     void addressSuffix
     foldr1 (<|>)
         [ try (string "say") >> space >> say
-        , try anagramP >> space >> anagram ((<= 5) . length)
+        , try anagramP >> many1 space >> anagram ((<= 5) . length)
         , strings (map BS.unpack introductions) >> liftIO (anyElem $ map BS.unpack introductions)
-        , hal9000Prefix >> space >> return (hal9000Response sender)
-        , magic8Prefix >> space >> liftIO magic8Response
+        , hal9000Prefix >> many1 space >> return (hal9000Response sender)
+        , magic8Prefix >> many1 space >> liftIO magic8Response
         ]
 
 
