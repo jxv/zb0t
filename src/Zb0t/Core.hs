@@ -99,7 +99,6 @@ interruptions =
     ["hueueueueue","lol","curvature","zbrt","woop woop woop","zqck"] ++ introductions
 
 
-
 input :: Conc.Chan Event -> IO ()
 input chan = do
     line <- getLine
@@ -169,18 +168,25 @@ replyMsg  Config{..} (IRC.Message (Just (IRC.NickName sender' _ _)) command para
     let receiver = BS.unpack (head params)
     let asker = if receiver == cfgNick then sender else receiver
     let body = unwords $ map BS.unpack (tail params)
-    let other str = return . Just $ Send (IRC.Message Nothing "PRIVMSG" [BS.pack asker, BS.empty, BS.pack str])
+    let respond str = return
+                    . Just
+                    . Send 
+                    $ IRC.Message Nothing "PRIVMSG" [BS.pack asker, BS.empty, BS.pack str]
     case Safe.readMay (BS.unpack command) of
         Just PRIVMSG -> do
-            res <- Parsec.runPT (response cfgNick sender) () "" body
-            either (const $ return Nothing) other res
+            result <- Parsec.runPT (response cfgNick sender) () "" body
+            either (const $ return Nothing) respond result
         _ -> return Nothing
 replyMsg _ _ = return Nothing
 
 
 response :: String -> String -> Parser String
 response self sender = foldr1 (<|>)
-    [ try $ string "zsay" >> space >> say
+    [ try $ zsayP >> space >> say
+    , do strings (map BS.unpack introductions)
+         void space
+         void $ string self
+         liftIO (anyElem $ map BS.unpack introductions)
     , addressResponse self sender
     ]
 
@@ -191,9 +197,19 @@ addressResponse self sender = do
     void addressSuffix
     foldr1 (<|>)
         [ try (string "say") >> space >> say
+        , try anagramP >> space >> anagram ((<= 5) . length)
+        , strings (map BS.unpack introductions) >> liftIO (anyElem $ map BS.unpack introductions)
         , hal9000Prefix >> space >> return (hal9000Response sender)
         , magic8Prefix >> space >> liftIO magic8Response
         ]
+
+
+anagram :: (String -> Bool) -> Parser String
+anagram isWord = do
+    word <- manyTill Parsec.alphaNum (void space <|> eof)
+    if length word >= 10
+       then parserFail ""
+       else return . unwords . anagrams isWord $ word
 
 
 say :: Parser String
@@ -206,20 +222,12 @@ addressSuffix :: Parser String
 addressSuffix = strings [" ",", ",": "]
 
 
-pingP :: Parser String
-pingP = string "PING"
-
-
-pongP :: Parser String
-pongP = string "PONG"
-
-
-privmsgP :: Parser String
-privmsgP = string "PRIVMSG"
-
-
 zsayP :: Parser String
 zsayP = string "zsay"
+
+
+anagramP :: Parser String
+anagramP = string "anagram"
 
 
 strings :: [String] -> Parser String
