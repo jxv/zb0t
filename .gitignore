@@ -2,3 +2,5 @@
 cabal.sandbox.config
 dist
 run.sh
+run-zb0t.sh
+run-test.sh
