@@ -1,12 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RecordWildCards #-}
 module Zb0t.Core
     ( run
     ) where
 
 import           Data.Functor (void)
 import           Control.Monad (when)
+import           Control.Monad.Trans (liftIO)
 import           Control.Applicative hiding ((<|>), join)
 import           GHC.IO.Handle (Handle)
 import           System.IO (hPutStrLn,hGetLine)
@@ -28,6 +30,7 @@ import           Text.Parsec ((<|>), string, parserFail, manyTill, anyChar, opti
 import qualified Text.Parsec as Parsec
 import qualified Text.Parsec.Combinator as Parsec
 import qualified Text.Parsec.String as Parsec
+import qualified Safe as Safe
 
 
 import Zb0t.Types
@@ -41,6 +44,7 @@ data CommandTag
     = PING
     | PONG
     | PRIVMSG
+    deriving (Show, Read, Eq, Enum, Bounded)
 
 
 type Parser = Parsec.ParsecT String () IO
@@ -97,14 +101,6 @@ interruptions =
     ["hueueueueue","lol","curvature","zbrt","woop woop woop","zqck"] ++ introductions
 
 
-commandMay :: BS.ByteString -> Maybe CommandTag
-commandMay = \case
-    "PING" -> Just PING
-    "PONG" -> Just PONG
-    "PRIVMSG" -> Just PRIVMSG
-    _ -> Nothing
-
-
 input :: Conc.Chan Event -> IO ()
 input chan = do
     line <- getLine
@@ -151,82 +147,93 @@ sendMsg :: Config -> Handle -> Conc.Chan Event -> IO Bool
 sendMsg cfg conn chan = do
     event <- Conc.readChan chan
     case event of
-        Send msg -> do let m = BS.unpack (IRC.encode msg)
-                       putStrLn m
-                       hPutStrLn conn m
-                       return True
-        Recv msg -> replyMsg cfg conn msg >> return True
-        RawMessage msg -> hPutStrLn conn msg >> putStrLn msg >> return True
+        RawMessage msg -> do
+            hPutStrLn conn msg
+            putStrLn msg
+        Send msg -> do
+            let m = BS.unpack (IRC.encode msg)
+            putStrLn m
+            hPutStrLn conn m
+        Recv msg -> do
+            mMsg <- replyMsg cfg msg
+            case mMsg of
+                Nothing -> return ()
+                Just event -> Conc.writeChan chan event
+    return True
+
+replyMsg :: Config -> IRC.Message -> IO (Maybe Event)
+replyMsg _ msg@(IRC.Message Nothing command params) = case Safe.readMay (BS.unpack command) of
+    Just PING -> return $ Just (Send pongMsg)
+    _ -> return Nothing
+replyMsg  Config{..} (IRC.Message (Just (IRC.NickName sender' _ _)) command params) = do
+    let sender = BS.unpack sender'
+    let receiver = BS.unpack (head params)
+    let asker = if receiver == cfgNick then sender else receiver
+    let body = unwords $ map BS.unpack (tail params)
+    let respond str = return
+                    . Just
+                    . Send 
+                    $ IRC.Message Nothing "PRIVMSG" [BS.pack asker, BS.empty, BS.pack str]
+    case Safe.readMay (BS.unpack command) of
+        Just PRIVMSG -> do
+            result <- Parsec.runPT (response cfgNick sender) () "" body
+            either (const $ return Nothing) respond result
+        _ -> return Nothing
+replyMsg _ _ = return Nothing
 
 
-replyMsg :: Config -> Handle -> IRC.Message -> IO ()
-replyMsg _ conn (IRC.Message Nothing cmd params)
-    | cmd == "PING" = reply "PONG"
-    | otherwise = return ()
- where reply x = hPutStrLn conn x >> putStrLn x
-replyMsg (Config _ _ _ nck _) conn (IRC.Message (Just (IRC.NickName sender _ _)) cmd (recvr:msg))
-  | cmd == "PRIVMSG" && prefixWith "zsay " (BS.unpack $ head msg) =
-       reply $ privmsg (zsay . drop 5 . unwords . map BS.unpack $ msg)
-  | cmd == "PRIVMSG" = if
-       | any (flip addressing msg') hal9000Prefixes -> hal9000
-       | any (flip addressing msg') magic8Prefixes -> magic8ball
-       | otherwise -> return ()
-  | otherwise = return ()
-  where
-    addressing m r = prefixWith (nck ++ " " ++ m)  r ||
-                     prefixWith (nck ++ ", " ++ m) r ||
-                     prefixWith (nck ++ ": " ++ m) r
-    msg' = BS.unpack $ head msg
-    hal9000Prefixes = ["will you open ", "can you open ", "may you open ","open the "]
-    magic8Prefixes = ["was ","were ","will ","do ","did ","does ","is ","are ","can ","have ",
-                      "has ","would ","could "]
-    reply x = hPutStrLn conn x >> putStrLn x
-    asker = BS.unpack (if BS.unpack recvr == nck then sender else recvr)
-    privmsg m = "PRIVMSG " ++  asker ++ " :" ++ m
-    magic8ball = (reply . privmsg) =<< magic8Response
-    hal9000 = (reply . privmsg) (hal9000Response $ BS.unpack sender)
-replyMsg _ _ _ = return ()
+response :: String -> String -> Parser String
+response self sender = foldr1 (<|>)
+    [ try $ zsayP >> space >> say
+    , do strings (map BS.unpack introductions)
+         void $ many1 space
+         void $ string self
+         liftIO (anyElem $ map BS.unpack introductions)
+    , addressResponse self sender
+    ]
 
 
-replyMsg' :: Config -> IRC.Message -> Conc.Chan Event -> IO ()
-replyMsg' config msg@(IRC.Message mPrefix command params) chan = do
-    let other str = do
-            Conc.writeChan chan $
-                Send (IRC.Message Nothing "PRIVMSG" [BS.pack "", BS.pack str])
-    case commandMay command of
-        Nothing -> return ()
-        Just PING -> Conc.writeChan chan (Send pongMsg)
-        Just PONG -> return ()
-        Just PRIVMSG -> do res <- Parsec.runPT pfun () "" (BS.unpack $ params !! 1)
-                           either (const $ return ()) other res
+addressResponse :: String -> String -> Parser String
+addressResponse self sender = do
+    void (string self)
+    void addressSuffix
+    foldr1 (<|>)
+        [ try (string "say") >> space >> say
+        , try anagramP >> many1 space >> anagram ((<= 5) . length)
+        , strings (map BS.unpack introductions) >> liftIO (anyElem $ map BS.unpack introductions)
+        , hal9000Prefix >> many1 space >> return (hal9000Response sender)
+        , magic8Prefix >> many1 space >> liftIO magic8Response
+        ]
 
 
-pfun :: Parser String
-pfun = parserFail ""
+anagram :: (String -> Bool) -> Parser String
+anagram isWord = do
+    word <- manyTill Parsec.alphaNum (void space <|> eof)
+    if length word >= 10
+       then parserFail ""
+       else return . unwords . anagrams isWord $ word
+
+
+say :: Parser String
+say = do
+    saying <- manyTill anyChar eof
+    return (zsay saying)
 
 
 addressSuffix :: Parser String
 addressSuffix = strings [" ",", ",": "]
 
 
-pingP :: Parser String
-pingP = string "PING"
-
-
-pongP :: Parser String
-pongP = string "PONG"
-
-
-privmsgP :: Parser String
-privmsgP = string "PRIVMSG"
-
-
 zsayP :: Parser String
 zsayP = string "zsay"
 
 
+anagramP :: Parser String
+anagramP = string "anagram"
+
+
 strings :: [String] -> Parser String
-strings = choice . map string
+strings = choice . map (try . string)
 
 
 hal9000Prefix :: Parser String
@@ -236,8 +243,7 @@ hal9000Prefix = strings
 
 magic8Prefix :: Parser String
 magic8Prefix = strings
-    ["was","were ","will","do","did","does","is","are","can","have","has","would "
-    ,"could "]
+    ["was","were ","will","do","did","does","is","are","can","have","has","would","could"]
 
 
 magic8Response :: IO String
@@ -248,7 +254,7 @@ magic8Response = anyElem
 
 
 hal9000Response :: String -> String
-hal9000Response = (++ "sorry, I can't do that, ")
+hal9000Response n = "sorry, I can't do that, " ++ n ++ "."
 
 
 anyElem :: [b] -> IO b

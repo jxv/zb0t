@@ -17,4 +17,5 @@ data Event
     = Send IRC.Message 
     | Recv IRC.Message
     | RawMessage String
+    deriving (Show, Eq)
 
