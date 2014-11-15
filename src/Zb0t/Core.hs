@@ -90,7 +90,7 @@ shameless channel chan = do
     Conc.threadDelay (r * 1000000)
     interruption <- anyElem interruptions
     let evt = Send $ IRC.Message Nothing "PRIVMSG" [BS.pack channel, interruption]
-    Conc.writeChan chan evt
+    -- Conc.writeChan chan evt
     shameless channel chan
    
 
