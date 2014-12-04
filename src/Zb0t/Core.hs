@@ -6,6 +6,7 @@ module Zb0t.Core
     ( run
     ) where
 
+import Control.Lens
 import           Data.Functor (void)
 import           Control.Monad (when)
 import           Control.Monad.Trans (liftIO)
@@ -32,12 +33,12 @@ import qualified Text.Parsec.Combinator as Parsec
 import qualified Text.Parsec.String as Parsec
 import qualified Safe as Safe
 
-
 import Zb0t.Types
+import qualified Zb0t.Config as Cfg
+import           Zb0t.Config (Config(..))
 import Zb0t.Say (zsay)
 
 import qualified Zb0t.Poker as Poker
-
 
 data CommandTag
     = PING
@@ -45,15 +46,12 @@ data CommandTag
     | PRIVMSG
     deriving (Show, Read, Eq, Enum, Bounded)
 
-
 type Parser = Parsec.ParsecT String () IO
-
 
 connect :: Config -> IO (Maybe Handle)
 connect (Config srv port _ _ _) = do
     let handle = Net.connectTo srv (Net.PortNumber $ fromIntegral port)
     (fmap Just handle) `catchIOError` (const $ return Nothing)
-
 
 run :: Config -> IO ()
 run cfg@(Config _ _ chans nck mpswd) = Net.withSocketsDo $ do
@@ -73,7 +71,6 @@ run cfg@(Config _ _ chans nck mpswd) = Net.withSocketsDo $ do
             Conc.killThread thdrecv
             Conc.killThread thdinput
 
-
 salutate :: String -> Conc.Chan Event -> IO ()
 salutate channel chan = do
     intro <- anyElem introductions
@@ -83,7 +80,6 @@ salutate channel chan = do
    
 introductions :: [BS.ByteString] 
 introductions = ["hi","hello","hey","hola"]
-
 
 shameless :: String -> Conc.Chan Event -> IO ()
 shameless channel chan = do
@@ -99,13 +95,11 @@ interruptions :: [BS.ByteString]
 interruptions =
     ["hueueueueue","lol","curvature","zbrt","woop woop woop","zqck"] ++ introductions
 
-
 input :: Conc.Chan Event -> IO ()
 input chan = do
     line <- getLine
     Conc.writeChan chan (RawMessage line)
     input chan
-
 
 login :: String -> Maybe String -> Conc.Chan Event -> IO ()
 login nck mpswd chan = do
@@ -115,16 +109,13 @@ login nck mpswd chan = do
         Nothing -> return ()
         Just pswd -> Conc.writeChan chan (Send $ identifyMsg pswd)
 
-
 joinChannel :: [String] -> Conc.Chan Event -> IO ()
 joinChannel chans chan = mapM_ (Conc.writeChan chan . Send . joinMsg) chans
-
 
 recv :: Handle -> Conc.Chan Event -> IO ()
 recv conn chan = do
     again <- (recvMsg conn chan) `catchIOError` (const $ return False)
     when again (recv conn chan)
-
 
 recvMsg :: Handle -> Conc.Chan Event -> IO Bool 
 recvMsg conn chan = do
@@ -135,12 +126,10 @@ recvMsg conn chan = do
         Just msg -> Conc.writeChan chan (Recv msg)
     return True
 
-
 send :: Config -> Handle -> Conc.Chan Event -> IO ()
 send cfg conn chan = do
     again <- (sendMsg cfg conn chan) `catchIOError` (const $ return False)
     when again (send cfg conn chan)
-
 
 sendMsg :: Config -> Handle -> Conc.Chan Event -> IO Bool
 sendMsg cfg conn chan = do
@@ -164,10 +153,11 @@ replyMsg :: Config -> IRC.Message -> IO (Maybe Event)
 replyMsg _ msg@(IRC.Message Nothing command params) = case Safe.readMay (BS.unpack command) of
     Just PING -> return $ Just (Send pongMsg)
     _ -> return Nothing
-replyMsg  Config{..} (IRC.Message (Just (IRC.NickName sender' _ _)) command params) = do
+replyMsg cfg (IRC.Message (Just (IRC.NickName sender' _ _)) command params) = do
+    let nick = cfg^.Cfg.nick
     let sender = BS.unpack sender'
     let receiver = BS.unpack (head params)
-    let asker = if receiver == cfgNick then sender else receiver
+    let asker = if receiver == nick then sender else receiver
     let body = unwords $ map BS.unpack (tail params)
     let respond str = return
                     . Just
@@ -175,11 +165,10 @@ replyMsg  Config{..} (IRC.Message (Just (IRC.NickName sender' _ _)) command para
                     $ IRC.Message Nothing "PRIVMSG" [BS.pack asker, BS.empty, BS.pack str]
     case Safe.readMay (BS.unpack command) of
         Just PRIVMSG -> do
-            result <- Parsec.runPT (response cfgNick sender) () "" body
+            result <- Parsec.runPT (response nick sender) () "" body
             either (const $ return Nothing) respond result
         _ -> return Nothing
 replyMsg _ _ = return Nothing
-
 
 response :: String -> String -> Parser String
 response self sender = foldr1 (<|>)
@@ -190,7 +179,6 @@ response self sender = foldr1 (<|>)
          liftIO (anyElem $ map BS.unpack introductions)
     , addressResponse self sender
     ]
-
 
 addressResponse :: String -> String -> Parser String
 addressResponse self sender = do
@@ -204,7 +192,6 @@ addressResponse self sender = do
         , magic8Prefix >> many1 space >> liftIO magic8Response
         ]
 
-
 anagram :: (String -> Bool) -> Parser String
 anagram isWord = do
     word <- manyTill Parsec.alphaNum (void space <|> eof)
@@ -212,38 +199,30 @@ anagram isWord = do
        then parserFail ""
        else return . unwords . anagrams isWord $ word
 
-
 say :: Parser String
 say = do
     saying <- manyTill anyChar eof
     return (zsay saying)
 
-
 addressSuffix :: Parser String
 addressSuffix = strings [" ",", ",": "]
-
 
 zsayP :: Parser String
 zsayP = string "zsay"
 
-
 anagramP :: Parser String
 anagramP = string "anagram"
 
-
 strings :: [String] -> Parser String
 strings = choice . map (try . string)
-
 
 hal9000Prefix :: Parser String
 hal9000Prefix = strings
     ["will you open", "can you open", "may you open","open the"]
 
-
 magic8Prefix :: Parser String
 magic8Prefix = strings
     ["was","were ","will","do","did","does","is","are","can","have","has","would","could"]
-
 
 magic8Response :: IO String
 magic8Response = anyElem
@@ -251,48 +230,37 @@ magic8Response = anyElem
     ,"possibly. query the pcercuei. he would know.","maybe...", "huh?", "sure", "nope"
     ,"yeah", "yup","yes", "no"]
 
-
 hal9000Response :: String -> String
 hal9000Response n = "sorry, I can't do that, " ++ n ++ "."
-
 
 anyElem :: [b] -> IO b
 anyElem xs = do
     idx <- Random.randomRIO (0, length xs -1)
     return $ xs !! idx
 
-
 solveBestHand :: String -> String
 solveBestHand _ = "fold, human"
-
 
 prefixWith :: String -> String -> Bool
 prefixWith xs ys = and $ zipWith (==) xs ys
 
-
 nickMsg :: String -> IRC.Message
 nickMsg n = IRC.Message Nothing "NICK" [BS.pack n]
-
 
 userMsg :: String -> Int -> String -> String -> IRC.Message
 userMsg u m t n = IRC.Message Nothing "USER" (map BS.pack [u, show m, t, ' ':n])
 
-
 identifyMsg :: String -> IRC.Message
 identifyMsg p = IRC.Message Nothing "PRIVMSG" ["nickserv", ":identify", BS.pack p]
-
 
 zmsg :: String -> String -> IRC.Message
 zmsg target msg = IRC.Message Nothing "PRIVMSG" (map BS.pack [target, ' ':(zsay msg)])
 
-
 pongMsg :: IRC.Message
 pongMsg = IRC.Message Nothing "PONG" []
 
-
 joinMsg :: String -> IRC.Message
 joinMsg chan = IRC.Message Nothing "JOIN" [BS.pack chan]
-
 
 anagrams :: (String -> Bool) -> String -> [String]
 anagrams isWord = filter isWord . L.nub . L.permutations

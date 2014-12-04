@@ -1,8 +1,7 @@
 module Main (main) where
 
 import System.Environment (getProgName,getArgs)
-
-import Zb0t.Config (makeConfig)
+import Zb0t.Parse.Config (makeConfig)
 import Zb0t.Core (run)
 
 
