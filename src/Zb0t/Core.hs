@@ -7,38 +7,34 @@ module Zb0t.Core
     ) where
 
 import Control.Lens
-import           Data.Functor (void)
-import           Control.Monad (when)
-import           Control.Monad.Trans (liftIO)
-import           Control.Applicative hiding ((<|>), join)
-import           GHC.IO.Handle (Handle)
-import           System.IO (hPutStrLn,hGetLine)
-import           System.IO.Error (catchIOError)
-import qualified Control.Concurrent as Conc
-import qualified Control.Concurrent.Chan as Conc
-import qualified Control.Concurrent.Async as Conc
+import Text.Parsec
+import Control.Applicative hiding ((<|>), join)
+import Zb0t.Types
 import qualified Network as Net
 import qualified Network.IRC as IRC
-import qualified Data.ByteString as BS hiding (pack, unpack)
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy as BL hiding (pack, unpack)
-import qualified Data.ByteString.Lazy.Char8 as BL
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BSC
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Lazy.Char8 as BLC
 import qualified Data.List as L
 import qualified System.Random as Random
-import           Text.Parsec ((<|>), string, parserFail, manyTill, anyChar, option, try,
-                              skipMany, parse, newline, eof, digit, many1, ParseError,
-                              choice, space, skipMany, skipMany1)
 import qualified Text.Parsec as Parsec
 import qualified Text.Parsec.Combinator as Parsec
 import qualified Text.Parsec.String as Parsec
 import qualified Safe as Safe
-
-import Zb0t.Types
 import qualified Zb0t.Config as Cfg
-import           Zb0t.Config (Config(..))
-import Zb0t.Say (zsay)
-
+import qualified Zb0t.Say as Say
 import qualified Zb0t.Poker as Poker
+import Control.Concurrent (forkIO, killThread, threadDelay)
+import Control.Concurrent.Chan (newChan, dupChan, writeChan, readChan, Chan)
+import Control.Concurrent.Async (async, wait)
+import Control.Monad (when, void)
+import Control.Monad.Trans (liftIO)
+import Data.ByteString (ByteString)
+import GHC.IO.Handle (Handle)
+import System.IO (hPutStrLn,hGetLine)
+import System.IO.Error (catchIOError)
+import Zb0t.Config (Config(..))
 
 data CommandTag
     = PING
@@ -46,11 +42,11 @@ data CommandTag
     | PRIVMSG
     deriving (Show, Read, Eq, Enum, Bounded)
 
-type Parser = Parsec.ParsecT String () IO
+type Parser = Parsec.ParsecT ByteString () IO
 
 connect :: Config -> IO (Maybe Handle)
 connect (Config srv port _ _ _) = do
-    let handle = Net.connectTo srv (Net.PortNumber $ fromIntegral port)
+    let handle = Net.connectTo (BSC.unpack srv) (Net.PortNumber $ fromIntegral port)
     (fmap Just handle) `catchIOError` (const $ return Nothing)
 
 run :: Config -> IO ()
@@ -59,150 +55,147 @@ run cfg@(Config _ _ chans nck mpswd) = Net.withSocketsDo $ do
     case mhandle of
         Nothing -> putStrLn "No connection."
         Just handle -> do
-            chan <- Conc.newChan
+            chan <- newChan
             login nck mpswd chan
             joinChannel chans chan
-            thdrecv <- Conc.forkIO (recv handle chan)
-            thdinput <- Conc.forkIO (input chan)
-            mapM_ (Conc.forkIO . flip salutate chan) chans
-            thds <- mapM (Conc.forkIO . flip shameless chan) chans
+            thdrecv <- forkIO (recv handle chan)
+            thdinput <- forkIO (input chan)
+            mapM_ (forkIO . flip salutate chan) chans
+            thds <- mapM (forkIO . flip shameless chan) chans
             send cfg handle chan
-            mapM_ Conc.killThread thds
-            Conc.killThread thdrecv
-            Conc.killThread thdinput
+            mapM_ killThread thds
+            killThread thdrecv
+            killThread thdinput
 
-salutate :: String -> Conc.Chan Event -> IO ()
+salutate :: ByteString -> Chan Event -> IO ()
 salutate channel chan = do
     intro <- anyElem introductions
-    let evt = Send $ IRC.Message Nothing "PRIVMSG" [BS.pack channel, intro]
-    Conc.writeChan chan evt
+    let evt = Send $ IRC.Message Nothing "PRIVMSG" [channel, intro]
+    writeChan chan evt
     
    
-introductions :: [BS.ByteString] 
-introductions = ["hi","hello","hey","hola"]
+introductions :: [ByteString] 
+introductions = ["hi","hello","hey","hola","sup"]
 
-shameless :: String -> Conc.Chan Event -> IO ()
+shameless :: ByteString -> Chan Event -> IO ()
 shameless channel chan = do
     r <- Random.randomRIO (300 * 12, 300 * 24)
-    Conc.threadDelay (r * 1000000)
+    threadDelay (r * 1000000)
     interruption <- anyElem interruptions
-    let evt = Send $ IRC.Message Nothing "PRIVMSG" [BS.pack channel, interruption]
-    -- Conc.writeChan chan evt
+    let evt = Send $ IRC.Message Nothing "PRIVMSG" [channel, interruption]
+    -- writeChan chan evt
     shameless channel chan
    
 
-interruptions :: [BS.ByteString]
+interruptions :: [ByteString]
 interruptions =
     ["hueueueueue","lol","curvature","zbrt","woop woop woop","zqck"] ++ introductions
 
-input :: Conc.Chan Event -> IO ()
+input :: Chan Event -> IO ()
 input chan = do
     line <- getLine
-    Conc.writeChan chan (RawMessage line)
+    writeChan chan (RawMessage line)
     input chan
 
-login :: String -> Maybe String -> Conc.Chan Event -> IO ()
+login :: ByteString -> Maybe ByteString -> Chan Event -> IO ()
 login nck mpswd chan = do
-    Conc.writeChan chan (Send $ nickMsg nck)
-    Conc.writeChan chan (Send $ userMsg nck 0 "*" nck)
+    writeChan chan (Send $ IRC.nick nck)
+    writeChan chan (Send $ IRC.user nck "0" "*" nck)
     case mpswd of 
         Nothing -> return ()
-        Just pswd -> Conc.writeChan chan (Send $ identifyMsg pswd)
+        Just pswd -> writeChan chan (Send $ identify pswd)
 
-joinChannel :: [String] -> Conc.Chan Event -> IO ()
-joinChannel chans chan = mapM_ (Conc.writeChan chan . Send . joinMsg) chans
+joinChannel :: [ByteString] -> Chan Event -> IO ()
+joinChannel chans chan = mapM_ (writeChan chan . Send . IRC.joinChan) chans
 
-recv :: Handle -> Conc.Chan Event -> IO ()
+recv :: Handle -> Chan Event -> IO ()
 recv conn chan = do
     again <- (recvMsg conn chan) `catchIOError` (const $ return False)
     when again (recv conn chan)
 
-recvMsg :: Handle -> Conc.Chan Event -> IO Bool 
+recvMsg :: Handle -> Chan Event -> IO Bool 
 recvMsg conn chan = do
     line <- hGetLine conn
     putStrLn line
-    case IRC.decode (BS.pack line) of
+    case IRC.decode (BSC.pack line) of
         Nothing -> return ()
-        Just msg -> Conc.writeChan chan (Recv msg)
+        Just msg -> writeChan chan (Recv msg)
     return True
 
-send :: Config -> Handle -> Conc.Chan Event -> IO ()
+send :: Config -> Handle -> Chan Event -> IO ()
 send cfg conn chan = do
     again <- (sendMsg cfg conn chan) `catchIOError` (const $ return False)
     when again (send cfg conn chan)
 
-sendMsg :: Config -> Handle -> Conc.Chan Event -> IO Bool
+sendMsg :: Config -> Handle -> Chan Event -> IO Bool
 sendMsg cfg conn chan = do
-    event <- Conc.readChan chan
+    event <- readChan chan
     case event of
         RawMessage msg -> do
             hPutStrLn conn msg
             putStrLn msg
         Send msg -> do
-            let m = BS.unpack (IRC.encode msg)
+            let m = BSC.unpack (IRC.encode msg)
             putStrLn m
             hPutStrLn conn m
         Recv msg -> do
             mMsg <- replyMsg cfg msg
             case mMsg of
                 Nothing -> return ()
-                Just event -> Conc.writeChan chan event
+                Just event -> writeChan chan event
     return True
 
 replyMsg :: Config -> IRC.Message -> IO (Maybe Event)
-replyMsg _ msg@(IRC.Message Nothing command params) = case Safe.readMay (BS.unpack command) of
-    Just PING -> return $ Just (Send pongMsg)
+replyMsg _ msg@(IRC.Message Nothing command params) = case Safe.readMay (BSC.unpack command) of
+    Just PING -> return $ Just (Send (IRC.pong ""))
     _ -> return Nothing
-replyMsg cfg (IRC.Message (Just (IRC.NickName sender' _ _)) command params) = do
+replyMsg cfg (IRC.Message (Just (IRC.NickName sender _ _)) command params) = do
     let nick = cfg^.Cfg.nick
-    let sender = BS.unpack sender'
-    let receiver = BS.unpack (head params)
+    let receiver = head params
     let asker = if receiver == nick then sender else receiver
-    let body = unwords $ map BS.unpack (tail params)
+    let body = BS.intercalate " " (tail params)
     let respond str = return
                     . Just
                     . Send 
-                    $ IRC.Message Nothing "PRIVMSG" [BS.pack asker, BS.empty, BS.pack str]
-    case Safe.readMay (BS.unpack command) of
+                    $ IRC.Message Nothing "PRIVMSG" [asker, BS.empty, str]
+    case Safe.readMay (BSC.unpack command) of
         Just PRIVMSG -> do
             result <- Parsec.runPT (response nick sender) () "" body
             either (const $ return Nothing) respond result
         _ -> return Nothing
 replyMsg _ _ = return Nothing
 
-response :: String -> String -> Parser String
+response :: ByteString -> ByteString -> Parser ByteString
 response self sender = foldr1 (<|>)
     [ try $ zsayP >> space >> say
-    , do strings (map BS.unpack introductions)
+    , do void $ bstrings introductions
          void $ many1 space
-         void $ string self
-         liftIO (anyElem $ map BS.unpack introductions)
+         void $ string (BSC.unpack self)
+         liftIO (anyElem introductions)
     , addressResponse self sender
     ]
 
-addressResponse :: String -> String -> Parser String
+addressResponse :: ByteString -> ByteString -> Parser ByteString
 addressResponse self sender = do
-    void (string self)
+    void (string (BSC.unpack self))
     void addressSuffix
     foldr1 (<|>)
         [ try (string "say") >> space >> say
         , try anagramP >> many1 space >> anagram ((<= 5) . length)
-        , strings (map BS.unpack introductions) >> liftIO (anyElem $ map BS.unpack introductions)
+        , bstrings introductions >> liftIO (anyElem introductions)
         , hal9000Prefix >> many1 space >> return (hal9000Response sender)
         , magic8Prefix >> many1 space >> liftIO magic8Response
         ]
 
-anagram :: (String -> Bool) -> Parser String
+anagram :: (String -> Bool) -> Parser ByteString
 anagram isWord = do
-    word <- manyTill Parsec.alphaNum (void space <|> eof)
-    if length word >= 10
+    word <- BSC.pack <$> manyTill Parsec.alphaNum (void space <|> eof)
+    if BS.length word >= 10
        then parserFail ""
-       else return . unwords . anagrams isWord $ word
+       else return . BS.intercalate " " . anagrams isWord $ word
 
-say :: Parser String
-say = do
-    saying <- manyTill anyChar eof
-    return (zsay saying)
+say :: Parser ByteString
+say = BSC.pack . Say.zsay <$> manyTill anyChar eof
 
 addressSuffix :: Parser String
 addressSuffix = strings [" ",", ",": "]
@@ -216,51 +209,42 @@ anagramP = string "anagram"
 strings :: [String] -> Parser String
 strings = choice . map (try . string)
 
-hal9000Prefix :: Parser String
-hal9000Prefix = strings
+bstrings :: [ByteString] -> Parser ByteString
+bstrings = fmap BSC.pack . strings . map BSC.unpack
+
+hal9000Prefix :: Parser ByteString
+hal9000Prefix = bstrings
     ["will you open", "can you open", "may you open","open the"]
 
-magic8Prefix :: Parser String
-magic8Prefix = strings
+magic8Prefix :: Parser ByteString
+magic8Prefix = bstrings
     ["was","were ","will","do","did","does","is","are","can","have","has","would","could"]
 
-magic8Response :: IO String
+magic8Response :: IO ByteString
 magic8Response = anyElem
     ["yes","no","idk. ask zrkw","sometimes","correct","probably","pository","negatory"
     ,"possibly. query the pcercuei. he would know.","maybe...", "huh?", "sure", "nope"
     ,"yeah", "yup","yes", "no"]
 
-hal9000Response :: String -> String
-hal9000Response n = "sorry, I can't do that, " ++ n ++ "."
+hal9000Response :: ByteString -> ByteString
+hal9000Response n = BS.concat ["sorry, ", n,". I can't do that."]
 
 anyElem :: [b] -> IO b
 anyElem xs = do
     idx <- Random.randomRIO (0, length xs -1)
     return $ xs !! idx
 
-solveBestHand :: String -> String
+solveBestHand :: ByteString -> ByteString
 solveBestHand _ = "fold, human"
 
 prefixWith :: String -> String -> Bool
 prefixWith xs ys = and $ zipWith (==) xs ys
 
-nickMsg :: String -> IRC.Message
-nickMsg n = IRC.Message Nothing "NICK" [BS.pack n]
-
-userMsg :: String -> Int -> String -> String -> IRC.Message
-userMsg u m t n = IRC.Message Nothing "USER" (map BS.pack [u, show m, t, ' ':n])
-
-identifyMsg :: String -> IRC.Message
-identifyMsg p = IRC.Message Nothing "PRIVMSG" ["nickserv", ":identify", BS.pack p]
+identify :: ByteString -> IRC.Message
+identify pswd = IRC.Message Nothing "PRIVMSG" ["nickserv", ":identify", pswd]
 
 zmsg :: String -> String -> IRC.Message
-zmsg target msg = IRC.Message Nothing "PRIVMSG" (map BS.pack [target, ' ':(zsay msg)])
+zmsg target msg = IRC.Message Nothing "PRIVMSG" (map BSC.pack [target, ' ':(Say.zsay msg)])
 
-pongMsg :: IRC.Message
-pongMsg = IRC.Message Nothing "PONG" []
-
-joinMsg :: String -> IRC.Message
-joinMsg chan = IRC.Message Nothing "JOIN" [BS.pack chan]
-
-anagrams :: (String -> Bool) -> String -> [String]
-anagrams isWord = filter isWord . L.nub . L.permutations
+anagrams :: (String -> Bool) -> ByteString -> [ByteString]
+anagrams isWord = map BSC.pack . filter isWord . L.nub . L.permutations . BSC.unpack

@@ -1,17 +1,19 @@
 module Zb0t.Parse.Config where
 
+import Control.Lens
+import Control.Applicative hiding ((<|>))
+
 import Zb0t.Config (Config(..))
 import Control.Monad.Fix (fix)
-import Control.Applicative hiding ((<|>))
 import Data.Functor (void)
-import Text.Parsec.String (Parser)
+import Data.ByteString (ByteString)
+import Text.Parsec.ByteString (Parser)
 import Text.Parsec ((<|>), string, parserFail, manyTill, anyChar, option, try,
                     skipMany, parse, newline, eof, digit, many1, ParseError)
-import qualified Data.ByteString as BS
+
+import qualified Data.ByteString as BS 
+import qualified Data.ByteString.Char8 as BSC
 import qualified Data.List as L
-import Control.Lens
-import Data.Default
-import Zb0t.Types
 
 makeConfig :: [String] -> Either String Config
 makeConfig args = case parseConfig args of
@@ -19,7 +21,7 @@ makeConfig args = case parseConfig args of
     Right cfg -> Right cfg
 
 parseConfig :: [String] -> Either ParseError Config
-parseConfig = parse config "" . (L.concat . L.intersperse "\n")
+parseConfig = parse config "" . (BSC.pack . L.concat . L.intersperse "\n")
 
 config :: Parser Config
 config = do
@@ -30,11 +32,11 @@ config = do
     c <- option [] channels
     return $ Config s p c n w
 
-server :: Parser String
+server :: Parser ByteString
 server = do
     flags ["-s","--server"]
     void newline
-    manyTill anyChar (void newline)
+    BSC.pack <$> manyTill anyChar (void newline)
 
 port :: Parser Int
 port = do
@@ -44,26 +46,27 @@ port = do
     void newline
     return (read p)
 
-nick :: Parser String
+nick :: Parser ByteString
 nick = do
     flags ["-n","--nick","--nickname"]
     void newline
-    manyTill anyChar (void newline <|> eof)
+    BSC.pack <$> manyTill anyChar (void newline <|> eof)
 
-password :: Parser (Maybe String)
+password :: Parser (Maybe ByteString)
 password = do
     flags ["-w","--pass","--passwd","--password"]
     void newline
-    Just <$> manyTill anyChar (void newline <|> eof)
+    Just . BSC.pack <$> manyTill anyChar (void newline <|> eof)
 
-channels :: Parser [String]
+channels :: Parser [ByteString]
 channels = do
     flags ["-c","--channel","--channels"]
     void newline
-    fix $ \loop -> do
+    chans <- fix $ \loop -> do
         c <- manyTill anyChar (void newline <|> eof) 
         (eof *> return [c]) <|> (do cs <- loop
                                     return (c : cs))
+    return (map BSC.pack chans)
 
 flags :: [String] -> Parser ()
 flags = void . foldr (\n ns -> ns <|> try (string n)) (parserFail "no flag elements") 

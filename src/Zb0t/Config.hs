@@ -4,13 +4,14 @@ module Zb0t.Config where
 
 import Control.Lens
 import Data.Default
+import Data.ByteString (ByteString)
 
 data Config = Config
-    { _serverAddr :: String
+    { _serverAddr :: ByteString
     , _serverPort :: Int
-    , _channels :: [String]
-    , _nick :: String
-    , _password :: Maybe String
+    , _channels :: [ByteString]
+    , _nick :: ByteString
+    , _password :: Maybe ByteString
     } deriving (Show, Eq)
 
 makeLenses ''Config
