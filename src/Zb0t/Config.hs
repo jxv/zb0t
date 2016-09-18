@@ -7,14 +7,14 @@ import Data.Default
 import Data.ByteString (ByteString)
 
 data Config = Config
-    { _serverAddr :: ByteString
-    , _serverPort :: Int
-    , _channels :: [ByteString]
-    , _nick :: ByteString
-    , _password :: Maybe ByteString
-    } deriving (Show, Eq)
+  { _serverAddr :: ByteString
+  , _serverPort :: Int
+  , _channels :: [ByteString]
+  , _nick :: ByteString
+  , _password :: Maybe ByteString
+  } deriving (Show, Eq)
 
 makeLenses ''Config
 
 instance Default Config where
-    def = Config "" 6667 [] "" Nothing
+  def = Config "" 6667 [] "" Nothing
