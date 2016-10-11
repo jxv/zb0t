@@ -92,8 +92,7 @@ shameless channel chan = do
    
 
 interruptions :: [Text]
-interruptions =
-  ["hueueueueue","lol","curvature","zbrt","woop woop woop","zqck"] ++ introductions
+interruptions = ["hueueueueue","lol","curvature","zbrt","woop woop woop","zqck"] ++ introductions
 
 input :: Chan Event -> IO ()
 input chan = do
