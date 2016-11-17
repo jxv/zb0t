@@ -10,6 +10,7 @@ import Control.Lens
 import Text.Parsec
 import Control.Applicative hiding ((<|>), join)
 import Zb0t.Types
+import Data.String (IsString)
 import qualified Network as Net
 import qualified Network.IRC as IRC
 import qualified Data.ByteString as BS
@@ -35,6 +36,7 @@ import Control.Monad (when, void)
 import Control.Monad.Trans (liftIO)
 import Data.ByteString (ByteString)
 import Data.Text (Text)
+import Data.List.NonEmpty (NonEmpty(..))
 import GHC.IO.Handle (Handle)
 import System.IO (hPutStrLn,hGetLine)
 import System.IO.Error (catchIOError)
@@ -54,7 +56,7 @@ connect (Config srv port _ _ _) = do
   (fmap Just handle) `catchIOError` (const $ return Nothing)
 
 run :: Config -> IO ()
-run cfg@(Config _ _ chans nck mpswd) = Net.withSocketsDo $ do
+run cfg@(Config _ _ chans nck mpswd) = do
   mhandle <- connect cfg
   case mhandle of
     Nothing -> putStrLn "No connection."
@@ -76,8 +78,7 @@ salutate channel chan = do
   intro <- anyElem introductions
   let evt = Send $ IRC.Message Nothing "PRIVMSG" [T.encodeUtf8 channel, T.encodeUtf8 intro]
   writeChan chan evt
-  
-   
+ 
 introductions :: [Text] 
 introductions = ["hi","hello","hey","hola","sup"]
 
@@ -89,7 +90,6 @@ shameless channel chan = do
   let evt = Send $ IRC.Message Nothing "PRIVMSG" [T.encodeUtf8 channel, T.encodeUtf8 interruption]
   -- writeChan chan evt
   shameless channel chan
-   
 
 interruptions :: [Text]
 interruptions = ["hueueueueue","lol","curvature","zbrt","woop woop woop","zqck"] ++ introductions
@@ -252,3 +252,62 @@ zmsg target msg = IRC.Message Nothing "PRIVMSG" (map BSC.pack [target, ' ':(Say.
 
 anagrams :: (String -> Bool) -> Text -> [Text]
 anagrams isWord = map T.pack . filter isWord . L.nub . L.permutations . T.unpack
+
+------------------------------------------------
+
+newtype Channel = Channel Text
+  deriving (Show, Eq, IsString)
+
+newtype Nickname = Nickname Text
+  deriving (Show, Eq, IsString)
+
+newtype Username = Username Text
+   deriving (Show, Eq, IsString)
+
+newtype Hostname = Hostname Text
+   deriving (Show, Eq, IsString)
+
+newtype Servername = Servername Text
+  deriving (Show, Eq, IsString)
+
+newtype Realname = Realname Text
+  deriving (Show, Eq, IsString)
+
+newtype Password = Password Text
+  deriving (Show, Eq, IsString)
+
+data Reciever
+  = RecieverChannel Channel
+  | RecieverNickname Nickname
+  deriving (Show, Eq)
+
+data Message
+  = NickMessage Nickname
+  | UserMessage Username Hostname Servername Realname
+  | IdentityMessage Password
+  | PrivateMessage (NonEmpty Reciever) Text
+  deriving (Show, Eq)
+
+type Response = ()
+
+toUsername :: Nickname -> Username
+toUsername (Nickname x) = Username x
+
+toRealname :: Nickname -> Realname
+toRealname (Nickname x) = Realname x
+
+class Monad m => Messager m where
+  msg :: Message -> m ()
+
+login' :: Messager m => Nickname -> Maybe Password -> m ()
+login' nickname password' = do
+  msg $ NickMessage nickname
+  msg $ UserMessage (toUsername nickname) "0" "*" (toRealname nickname)
+  whenMaybe password' (msg . IdentityMessage)
+
+respond :: Response -> Message
+respond _ = PrivateMessage undefined undefined
+
+whenMaybe :: Monad m => Maybe a -> (a -> m ()) -> m ()
+whenMaybe Nothing _ = return ()
+whenMaybe (Just a) f = f a

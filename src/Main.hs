@@ -1,26 +1,29 @@
 module Main (main) where
 
+import Network (withSocketsDo)
 import System.Environment (getProgName,getArgs)
 import Zb0t.Parse.Config (makeConfig)
 import Zb0t.Core (run)
-import Zb0t.Monad (Zb0t, runZb0t)
+import qualified Zb0t.Monad as Zb0t
+
 
 main :: IO ()
-main = do
-     args <- getArgs
-     either printUsageErr run (makeConfig args)
+main = withSocketsDo $ do
+  args <- getArgs
+  either printUsageErr run (makeConfig args)
+  Zb0t.runIO (return ())
 
 printUsageErr :: String -> IO ()
 printUsageErr err = do
-     putStrLn $ "Error: " ++ err
-     prog <- getProgName
-     putStrLn $ unwords ("Usage:" : prog : options)
+  putStrLn $ "Error: " ++ err
+  prog <- getProgName
+  putStrLn $ unwords ("Usage:" : prog : options)
 
 options :: [String]
 options = 
-    [ "-s <server>"
-    , "[-p <port>]"
-    , "-n <nick>"
-    , "[-w <password>]"
-    , "[-c <chan0> [<chan1> [...]]]"
-    ]
+  [ "-s <server>"
+  , "[-p <port>]"
+  , "-n <nick>"
+  , "[-w <password>]"
+  , "[-c <chan0> [<chan1> [...]]]"
+  ]

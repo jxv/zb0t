@@ -24,6 +24,7 @@ executable zb0t
     , mtl
     , transformers
     , safe
+    , semigroups
     , containers
     , parsec
     , random
