@@ -3,10 +3,35 @@ module Zb0t.Monad
   , runIO
   ) where
 
-import Control.Monad.IO.Class (MonadIO(liftIO))
+import Protolude
 
-newtype Zb0t a = Zb0t { unZb0t :: IO a }
-  deriving (Functor, Applicative, Monad, MonadIO)
+import Zb0t.Types
+import Zb0t.Has
+import Zb0t.Chat
+import Zb0t.Logger
+import Zb0t.Messager
 
-runIO :: Zb0t a -> IO a
-runIO (Zb0t m) = m
+data Env = Env
+  { _outbound :: MessageQueue Zb0t Message
+  }
+
+newtype Zb0t a = Zb0t { unZb0t :: ReaderT Env IO a }
+  deriving (Functor, Applicative, Monad, MonadIO, MonadReader Env)
+
+runIO :: Zb0t a -> Env -> IO a
+runIO (Zb0t m) outbound = runReaderT m outbound
+
+instance Has Zb0t where
+  getOutbound = asks _outbound
+
+instance Chat Zb0t where
+  login = login'
+  enter = enter'
+  leave = leave'
+  say = say' 
+
+instance Logger Zb0t where
+  logInfo = logInfo'
+
+instance Messager Zb0t where
+  msg = msg'

@@ -9,7 +9,6 @@ module Zb0t.Core
 import Control.Lens
 import Text.Parsec
 import Control.Applicative hiding ((<|>), join)
-import Zb0t.Types
 import Data.String (IsString)
 import qualified Network as Net
 import qualified Network.IRC as IRC
@@ -41,6 +40,9 @@ import GHC.IO.Handle (Handle)
 import System.IO (hPutStrLn,hGetLine)
 import System.IO.Error (catchIOError)
 import Zb0t.Config (Config(..))
+
+import Zb0t.Types
+import Zb0t.Messager
 
 data CommandTag
   = PING
@@ -163,8 +165,13 @@ replyMsg cfg (IRC.Message (Just (IRC.NickName sender _ _)) command params) = do
           $ IRC.Message Nothing "PRIVMSG" [asker, BS.empty, str]
   case Safe.readMay (BSC.unpack command) of
     Just PRIVMSG -> do
-      result <- Parsec.runPT (response (T.decodeUtf8 nick) (T.decodeUtf8 sender)) () "" (T.decodeUtf8 body)
-      either (const $ return Nothing) respond (fmap T.encodeUtf8 result)
+      let self = Nickname (T.decodeUtf8 nick)
+      let sender' = RecieverChannel (Channel $ T.decodeUtf8 sender)
+      let body' = T.decodeUtf8 body
+      res <- responder self sender' body'
+      return $ case res of
+        Nothing -> Nothing
+        Just (MessagePrivate _ responseBody) -> Just $ Send $ IRC.Message Nothing "PRIVMSG" [asker, BS.empty, T.encodeUtf8 responseBody]
     _ -> return Nothing
 replyMsg _ _ = return Nothing
 
@@ -255,59 +262,13 @@ anagrams isWord = map T.pack . filter isWord . L.nub . L.permutations . T.unpack
 
 ------------------------------------------------
 
-newtype Channel = Channel Text
-  deriving (Show, Eq, IsString)
-
-newtype Nickname = Nickname Text
-  deriving (Show, Eq, IsString)
-
-newtype Username = Username Text
-   deriving (Show, Eq, IsString)
-
-newtype Hostname = Hostname Text
-   deriving (Show, Eq, IsString)
-
-newtype Servername = Servername Text
-  deriving (Show, Eq, IsString)
-
-newtype Realname = Realname Text
-  deriving (Show, Eq, IsString)
-
-newtype Password = Password Text
-  deriving (Show, Eq, IsString)
-
-data Reciever
-  = RecieverChannel Channel
-  | RecieverNickname Nickname
-  deriving (Show, Eq)
-
-data Message
-  = NickMessage Nickname
-  | UserMessage Username Hostname Servername Realname
-  | IdentityMessage Password
-  | PrivateMessage (NonEmpty Reciever) Text
-  deriving (Show, Eq)
-
-type Response = ()
-
-toUsername :: Nickname -> Username
-toUsername (Nickname x) = Username x
-
-toRealname :: Nickname -> Realname
-toRealname (Nickname x) = Realname x
-
-class Monad m => Messager m where
-  msg :: Message -> m ()
-
-login' :: Messager m => Nickname -> Maybe Password -> m ()
-login' nickname password' = do
-  msg $ NickMessage nickname
-  msg $ UserMessage (toUsername nickname) "0" "*" (toRealname nickname)
-  whenMaybe password' (msg . IdentityMessage)
-
-respond :: Response -> Message
-respond _ = PrivateMessage undefined undefined
-
-whenMaybe :: Monad m => Maybe a -> (a -> m ()) -> m ()
-whenMaybe Nothing _ = return ()
-whenMaybe (Just a) f = f a
+responder :: Nickname -> Reciever -> Text -> IO (Maybe Message)
+responder (Nickname self) reciever body = do
+  result <- Parsec.runPT (response self sender) () "" body
+  case result of
+    Left _ -> return Nothing
+    Right response -> return $ Just $ MessagePrivate (reciever :| []) response
+  where
+    sender = case reciever of
+      RecieverNickname (Nickname sender) -> sender
+      RecieverChannel (Channel sender) -> sender

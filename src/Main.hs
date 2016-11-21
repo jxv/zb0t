@@ -11,7 +11,7 @@ main :: IO ()
 main = withSocketsDo $ do
   args <- getArgs
   either printUsageErr run (makeConfig args)
-  Zb0t.runIO (return ())
+  -- Zb0t.runIO (return ())
 
 printUsageErr :: String -> IO ()
 printUsageErr err = do

@@ -18,6 +18,7 @@ executable zb0t
   -- other-extensions:    
   build-depends:
       base
+    , protolude
     , bytestring
     , network
     , irc
