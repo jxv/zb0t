@@ -12,8 +12,8 @@ module Zb0t.Chat
   , whenMaybe
   ) where
 
-import Protolude hiding (msg)
-import Data.List.NonEmpty (NonEmpty(..))
+import Prelude ()
+import Pregame
 
 import Zb0t.Types
 import Zb0t.Messager
@@ -23,29 +23,29 @@ class Monad m => Chat m where
   login :: Nickname -> Maybe Password -> m ()
   enter :: Channel -> m ()
   leave :: Channel -> m ()
-  say :: Reciever -> Text -> m ()
+  say :: Medium -> Text -> m ()
 
 login' :: (Messager m, Logger m) => Nickname -> Maybe Password -> m ()
 login' nickname password' = do
   logInfo $ formatLoginLog nickname password'
-  msg $ MessageNick nickname
-  msg $ MessageUser (toUsername nickname) "0" "*" (toRealname nickname)
-  whenMaybe password' (msg . MessageIdentity)
+  msg $ DetailNick nickname
+  msg $ DetailUser (toUsername nickname) "0" "*" (toRealname nickname)
+  whenMaybe password' (msg . DetailIdentity)
 
 enter' :: (Messager m, Logger m) => Channel -> m ()
 enter' channel = do
   logInfo $ formatEnterLog channel
-  msg $ MessageJoin (channel :| [])
+  msg $ DetailJoin (channel :| [])
 
 leave' :: (Messager m, Logger m) => Channel -> m ()
 leave' channel = do
   logInfo $ formatLeaveLog channel
-  msg $ MessagePart (channel :| [])
+  msg $ DetailPart (channel :| [])
 
-say' :: (Messager m, Logger m) => Reciever -> Text -> m ()
-say' reciever message = do
-  logInfo $ formatSayLog reciever message
-  msg $ MessagePrivate (reciever :| []) message
+say' :: (Messager m, Logger m) => Medium -> Text -> m ()
+say' target message = do
+  logInfo $ formatSayLog target message
+  msg $ DetailPrivate target message
 
 formatLoginLog :: Nickname -> Maybe Password -> Text
 formatLoginLog (Nickname nickname) password = "login: " <> nickname <> passwordStatus
@@ -58,12 +58,12 @@ formatEnterLog (Channel channel) = "enter: " <> channel
 formatLeaveLog :: Channel -> Text
 formatLeaveLog (Channel channel) = "leave: " <> channel
 
-formatSayLog :: Reciever -> Text -> Text
-formatSayLog reciever message = "say: " <> target <> " <- " <> message
+formatSayLog :: Medium -> Text -> Text
+formatSayLog target message = "say: " <> target' <> " <- " <> message
   where
-    target = case reciever of
-      RecieverChannel (Channel channel) -> channel
-      RecieverNickname (Nickname nickname) -> nickname
+    target' = case target of
+      MediumChannel (Channel channel) -> channel
+      MediumNickname (Nickname nickname) -> nickname
 
 whenMaybe :: Monad m => Maybe a -> (a -> m ()) -> m ()
 whenMaybe Nothing _ = return ()

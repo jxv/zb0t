@@ -1,6 +1,7 @@
 resolver: lts-7.9
 packages:
 - '.'
-extra-deps: []
+extra-deps:
+- pregame-1.0.1.0
 flags: {}
 extra-package-dbs: []

@@ -12,7 +12,7 @@ import Zb0t.Logger
 import Zb0t.Messager
 
 data Env = Env
-  { _outbound :: MessageQueue Zb0t Message
+  { _outbound :: MessageQueue Zb0t Detail
   }
 
 newtype Zb0t a = Zb0t { unZb0t :: ReaderT Env IO a }

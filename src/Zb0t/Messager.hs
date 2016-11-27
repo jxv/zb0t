@@ -7,9 +7,9 @@ import Zb0t.Types
 import Zb0t.Has
 
 class Monad m => Messager m where
-  msg :: Message -> m ()
+  msg :: Detail -> m ()
 
-msg' :: Has m => Message -> m ()
+msg' :: Has m => Detail -> m ()
 msg' message = do
   outbound <- getOutbound
   _writeMessageQueue outbound message

@@ -5,4 +5,4 @@ module Zb0t.Has
 import Zb0t.Types
 
 class Monad m => Has m where
-  getOutbound :: m (MessageQueue m Message)
+  getOutbound :: m (MessageQueue m Detail)

@@ -6,6 +6,8 @@ module Zb0t.Core
   ( run
   ) where
 
+import Pregame (ToText(..), join)
+
 import Control.Lens
 import Text.Parsec
 import Control.Applicative hiding ((<|>), join)
@@ -150,30 +152,42 @@ sendMsg cfg conn chan = do
         Just event -> writeChan chan event
   return True
 
+adaptToMessage :: Nickname -> IRC.Message -> Maybe Message
+adaptToMessage self (IRC.Message (Just (IRC.NickName sender' _ _)) command params) = let
+  sender = Nickname (T.decodeUtf8 sender')
+  inbound' = T.decodeUtf8 (head params)
+  inbound = inboundTarget self inbound'
+  body = T.decodeUtf8 (BS.intercalate " " (tail params))
+  in case Safe.readMay (BSC.unpack command) of
+    Just PRIVMSG -> Just $ Message (PrefixNickname sender Nothing Nothing) (DetailPrivate inbound body)
+    _ -> Nothing
+
+adaptFromDetail :: Detail -> Maybe IRC.Message
+adaptFromDetail (DetailPrivate target responseBody) = Just $ IRC.Message Nothing "PRIVMSG" [T.encodeUtf8 $ toText target, BS.empty, T.encodeUtf8 responseBody]
+adaptFromDetail _ = Nothing
+
 replyMsg :: Config -> IRC.Message -> IO (Maybe Event)
 replyMsg _ msg@(IRC.Message Nothing command params) = case Safe.readMay (BSC.unpack command) of
   Just PING -> return $ Just (Send (IRC.pong ""))
   _ -> return Nothing
-replyMsg cfg (IRC.Message (Just (IRC.NickName sender _ _)) command params) = do
-  let nick = cfg^.Cfg.nick
-  let receiver = head params
-  let asker = if receiver == nick then sender else receiver
-  let body = BS.intercalate " " (tail params)
-  let respond str = return
-          . Just
-          . Send 
-          $ IRC.Message Nothing "PRIVMSG" [asker, BS.empty, str]
-  case Safe.readMay (BSC.unpack command) of
-    Just PRIVMSG -> do
-      let self = Nickname (T.decodeUtf8 nick)
-      let sender' = RecieverChannel (Channel $ T.decodeUtf8 sender)
-      let body' = T.decodeUtf8 body
-      res <- responder self sender' body'
-      return $ case res of
-        Nothing -> Nothing
-        Just (MessagePrivate _ responseBody) -> Just $ Send $ IRC.Message Nothing "PRIVMSG" [asker, BS.empty, T.encodeUtf8 responseBody]
+replyMsg cfg m = do
+  let self = Nickname (T.decodeUtf8 $ cfg ^. Cfg.nick)
+  case adaptToMessage self m of
+    Just (Message (PrefixNickname sender _ _) (DetailPrivate inbound body)) ->  do
+      res <- responder self sender (outboundTarget sender inbound) body
+      return . join $ (fmap Send . adaptFromDetail) <$> res
     _ -> return Nothing
-replyMsg _ _ = return Nothing
+
+inboundTarget :: Nickname -> Text -> Medium
+inboundTarget self inbound = if inbound == toText self then nickname inbound else channel inbound
+  where
+    nickname = MediumNickname . Nickname
+    channel = MediumChannel . Channel
+
+outboundTarget :: Nickname -> Medium -> Medium
+outboundTarget sender inbound = case inbound of
+  MediumNickname _ -> MediumNickname sender
+  MediumChannel{} -> inbound
 
 response :: Text -> Text -> Parser Text
 response self sender = foldr1 (<|>)
@@ -262,13 +276,9 @@ anagrams isWord = map T.pack . filter isWord . L.nub . L.permutations . T.unpack
 
 ------------------------------------------------
 
-responder :: Nickname -> Reciever -> Text -> IO (Maybe Message)
-responder (Nickname self) reciever body = do
-  result <- Parsec.runPT (response self sender) () "" body
+responder :: Nickname -> Nickname -> Medium -> Text -> IO (Maybe Detail)
+responder (Nickname self) sender target body = do
+  result <- Parsec.runPT (response self (toText sender)) () "" body
   case result of
     Left _ -> return Nothing
-    Right response -> return $ Just $ MessagePrivate (reciever :| []) response
-  where
-    sender = case reciever of
-      RecieverNickname (Nickname sender) -> sender
-      RecieverChannel (Channel sender) -> sender
+    Right response -> return $ Just $ DetailPrivate target response

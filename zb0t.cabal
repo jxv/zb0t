@@ -19,6 +19,7 @@ executable zb0t
   build-depends:
       base
     , protolude
+    , pregame
     , bytestring
     , network
     , irc
