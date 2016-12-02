@@ -12,31 +12,86 @@ build-type: Simple
 -- extra-source-files:  
 cabal-version: >= 1.10
 
-executable zb0t
-  main-is: Main.hs
-  -- other-modules:
-  -- other-extensions:    
+library
+  hs-source-dirs:
+    src
+  exposed-modules:
+    Zb0t
   build-depends:
-      base
-    , protolude
-    , pregame
-    , bytestring
-    , network
+      async
+    , base
+    , containers
     , irc
     , mtl
-    , transformers
-    , safe
-    , semigroups
-    , containers
+    , network
     , parsec
+    , pregame
+    , safe
     , random
-    , async
-    , lens
-    , stm
-    , data-default
-    , text
-  
-  hs-source-dirs: src     
-  default-language: Haskell2010
+    , servant
+    , servant-server
+  default-language:
+    Haskell2010
   default-extensions:
+    NoImplicitPrelude
+    OverloadedStrings
+    TypeSynonymInstances
+    FlexibleInstances
+    FlexibleContexts
     GeneralizedNewtypeDeriving
+    LambdaCase
+    ScopedTypeVariables
+    NamedFieldPuns
+    MultiParamTypeClasses
+    TypeFamilies
+    TupleSections
+
+executable zb0t-exe
+  hs-source-dirs:
+    app
+  main-is:
+    Main.hs
+  ghc-options:
+    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , zb0t
+  default-language:
+    Haskell2010
+
+test-suite zb0t-test
+  type:
+    exitcode-stdio-1.0
+  hs-source-dirs:
+    test
+  main-is:
+    Spec.hs
+  build-depends:
+      base
+    , hspec
+    , pregame
+    , test-fixture
+    , zb0t
+  ghc-options:
+    -threaded -rtsopts -with-rtsopts=-N
+  default-language:
+    Haskell2010
+  default-extensions:
+    NoImplicitPrelude
+    TypeSynonymInstances
+    FlexibleInstances
+    FlexibleContexts
+    GeneralizedNewtypeDeriving
+    LambdaCase
+    ScopedTypeVariables
+    NamedFieldPuns
+    MultiParamTypeClasses
+    TypeFamilies
+    TupleSections
+    TemplateHaskell
+
+source-repository head
+  type:
+    git
+  location:
+    https://github.com/jxv/zb0t
