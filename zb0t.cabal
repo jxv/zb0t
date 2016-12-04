@@ -17,6 +17,9 @@ library
     src
   exposed-modules:
     Zb0t
+    Zb0t.Control
+    Zb0t.Logger
+    Zb0t.Irc
   build-depends:
       async
     , base

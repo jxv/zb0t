@@ -1,28 +1,13 @@
 module Zb0t
   ( runIO
-  , Zb0t
-  , main
-  , Log(..)
-  , startMessage
   ) where
 
 import Pregame
+import qualified Zb0t.Control as Control
 
-newtype Zb0t a = Zb0t (IO a)
-  deriving (Functor, Applicative, Monad, MonadIO)
-
-runIO :: Zb0t a -> IO a
-runIO (Zb0t m) = m
+runIO :: IO ()
+runIO = do
+  Control.runIO Control.main
 
 class Monad m => Log m where
   logInfo :: Text -> m ()
-
-main :: Log m => m ()
-main = do
-  logInfo startMessage
-
-startMessage :: Text
-startMessage = "Starting..."
-
-instance Log Zb0t where
-  logInfo = liftIO . putStrLn

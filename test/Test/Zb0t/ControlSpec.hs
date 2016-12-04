@@ -1,17 +1,19 @@
 {-# LANGUAGE QuasiQuotes #-}
-module Test.Zb0tSpec (spec) where
+module Test.Zb0t.ControlSpec (spec) where
 
 import Pregame
 import Test.Hspec
-import Zb0t
 import Control.Monad.TestFixture
 import Control.Monad.TestFixture.TH
 
-mkFixture "Fixture" [ts|Log|]
+import Zb0t.Control
+import Zb0t.Logger
+
+mkFixture "Fixture" [ts|Logger|]
 
 spec :: Spec
-spec = do
-  describe "main" $ do
+spec =
+  describe "main" $
     it "should log the starting message" $ do
       calls <- logTestFixtureT main Fixture
         { _logInfo = \msg -> do
